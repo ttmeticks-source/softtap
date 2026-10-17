@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "SoftCheck",
+    "slug": "softcheck",
+    "scheme": "softcheck",
+    "version": "0.2.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": { "supportsTablet": true },
+    "android": {
+      "package": "com.softcheck.app",
+      "versionCode": 1,
+      "adaptiveIcon": { "backgroundColor": "#FCE7F3" }
+    }
+  }
+}
