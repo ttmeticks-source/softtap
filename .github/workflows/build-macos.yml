@@ -7,10 +7,14 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: smash-simulator-macos-release
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: macos-15
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -19,16 +23,34 @@ jobs:
           swift --version
           xcrun --sdk macosx --show-sdk-version
 
-      - name: Build native app bundle
+      - name: Build universal macOS 11 app bundle
         run: |
           chmod +x build.sh
           ./build.sh
 
-      - name: Verify app and archive
+      - name: Verify deployment target and CPU architectures
         run: |
-          test -d "dist/Smash Simulator.app"
+          APP="dist/Smash Simulator.app"
+          EXECUTABLE="$APP/Contents/MacOS/SmashSimulator"
+          MINIMUM_OS="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$APP/Contents/Info.plist")"
+          test "$MINIMUM_OS" = "11.0"
+
+          ARCHS="$(/usr/bin/lipo -archs "$EXECUTABLE")"
+          echo "Built architectures: $ARCHS"
+          [[ " $ARCHS " == *" arm64 "* ]]
+          [[ " $ARCHS " == *" x86_64 "* ]]
+
+          for ARCH in arm64 x86_64; do
+            echo "Checking $ARCH deployment target..."
+            otool -arch "$ARCH" -l "$EXECUTABLE" | awk '
+              /cmd LC_BUILD_VERSION/ { in_build = 1; next }
+              in_build && $1 == "minos" && $2 == "11.0" { found = 1 }
+              in_build && $1 == "cmd" { in_build = 0 }
+              END { exit !found }
+            '
+          done
+
           test -s "dist/Smash-Simulator-macOS.zip"
-          /usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "dist/Smash Simulator.app/Contents/Info.plist"
           unzip -tq "dist/Smash-Simulator-macOS.zip"
 
       - name: Upload build artifact
@@ -43,9 +65,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: Smash Simulator build ${{ github.run_number }}
+          name: Smash Simulator build ${{ github.run_number }} (macOS 11+)
           target_commitish: main
-          body: Automated macOS build of Smash Simulator. Download Smash-Simulator-macOS.zip.
+          body: Universal Intel and Apple Silicon build. Minimum supported version: macOS 11 Big Sur.
           files: dist/Smash-Simulator-macOS.zip
           make_latest: true
           overwrite_files: true
