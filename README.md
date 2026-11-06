@@ -1,40 +1,36 @@
 # Smash Simulator
 
-A native macOS 3D destruction sandbox. All breakage is virtual inside the app; it does not affect real devices, your Mac, your desktop, or your files.
+A native macOS 3D destruction sandbox with a detailed desk scene, pointer-controlled tools, glitch displays, scratches and rigid debris.
 
-## System support
+## Requirements
 
-- **macOS 11 Big Sur or newer**.
-- Universal app for both **Intel (x86_64)** and **Apple Silicon (arm64)** Macs.
-- The executable and app bundle are both built with macOS 11.0 as the minimum deployment target.
+- macOS 11 Big Sur or newer.
+- Universal app: Intel (x86_64) and Apple Silicon (arm64).
+- Native AppKit + SceneKit. No browser wrapper or Xcode project.
 
 ## Install with one curl command
-
-Open Terminal and paste:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ttmeticks-source/softtap/main/install.sh | bash
 ```
 
-The installer checks your macOS version, downloads and validates the latest app ZIP, installs **Smash Simulator.app** into /Applications (or ~/Applications if needed), and opens it.
+The installer shows download progress, validates the ZIP, checks the app's macOS 11 minimum and both CPU architectures, installs it in Applications, and opens it.
 
-The app is compiled on GitHub's macOS runner. You do not need to clone the repository or compile Swift locally.
+## Controls
 
-## Included
+- Move the mouse to move the selected 3D tool.
+- Click or drag on a device, desk, floor panel or room prop to interact.
+- Choose the device, tool, room and impact strength from the left panel.
+- Orbit the scene and zoom with SceneKit camera controls.
+- Use Drop Object to run a virtual drop test and Reset Room to restore the scene.
 
-- Native AppKit + SceneKit app.
-- Virtual iPhone, iPad, MacBook, and desktop PC models.
-- Studio, garage, concrete, bedroom, and neon lab rooms.
-- Hammer, wrecking ball, kick, and drop-test simulation.
-- Adjustable impact intensity and scene reset.
+## Simulation
 
-## Build pipeline
+Devices have separate chassis, display, keyboard, camera, speaker and port details. Their displays show an original locally generated glitch/test feed with the text **Made by C0oled**; no downloaded third-party video or copyrighted footage is included.
 
-Every push to main queues a macOS build. After the build and compatibility checks succeed, GitHub publishes a release asset named `Smash-Simulator-macOS.zip`; the installer downloads the latest successful release.
+Damage is represented by scratches and separate rigid fragments with collision, not rubber-like stretching. SceneKit provides rigid-body dynamics and collision handling; this is a lightweight fracture approximation, not BeamNG's full node-and-beam soft-body solver. Debris clears itself after a short time to keep the scene responsive.
 
-## Safety / scope
-
-All effects are visual simulations. The app does not access device hardware, control connected devices, modify the macOS desktop, or delete user data.
+The desk, its supports, floor panels and room props have collision bodies. Strong virtual hits can break selected surfaces into individual pieces. The simulation never damages or controls real devices or files.
 
 ## License
 
