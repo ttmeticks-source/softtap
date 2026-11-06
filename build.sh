@@ -44,6 +44,8 @@ cp "dist/Smash.iconset/icon_256x256.png" "dist/Smash.iconset/icon_256x256@1x.png
 cp "dist/Smash.iconset/icon_512x512.png" "dist/Smash.iconset/icon_256x256@2x.png"
 cp "dist/Smash.iconset/icon_512x512.png" "dist/Smash.iconset/icon_512x512@1x.png"
 cp "dist/Smash.iconset/icon_1024x1024.png" "dist/Smash.iconset/icon_512x512@2x.png"
+# iconutil accepts only the standard iconset filenames.
+rm -f "dist/Smash.iconset/icon_64x64.png" "dist/Smash.iconset/icon_1024x1024.png"
 iconutil -c icns "dist/Smash.iconset" -o "$RES/Smash.icns"
 swiftc -O -framework AppKit -framework SceneKit -framework QuartzCore Sources/main.swift -o "$MACOS/SmashSimulator"
 cat > "$CONTENTS/Info.plist" <<'PLIST'
