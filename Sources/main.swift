@@ -3,10 +3,11 @@ import SceneKit
 import QuartzCore
 
 final class SmashSceneView: SCNView {
-    var onStrike: (() -> Void)?
+    var onInspect: ((NSPoint) -> Void)?
     override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        onInspect?(point)
         super.mouseDown(with: event)
-        onStrike?()
     }
 }
 
@@ -26,9 +27,23 @@ final class SmashSimulator: NSObject, NSApplicationDelegate {
     private var damageSlider: NSSlider!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.activate(ignoringOtherApps: true)
+        guard showAgeNotice() else {
+            NSApp.terminate(nil)
+            return
+        }
         buildWindow()
         buildScene()
-        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func showAgeNotice() -> Bool {
+        let notice = NSAlert()
+        notice.alertStyle = .warning
+        notice.messageText = "16+ VIRTUAL SIMULATION NOTICE"
+        notice.informativeText = "Smash Simulator is intended for users aged 16 and older. All effects are fictional simulations inside this app. Do not try to reproduce them on real devices or property. This is a self-confirmation prompt, not identity or age verification."
+        notice.addButton(withTitle: "I confirm I am 16 or older")
+        notice.addButton(withTitle: "Quit")
+        return notice.runModal() == .alertFirstButtonReturn
     }
 
     private func buildWindow() {
@@ -62,21 +77,12 @@ final class SmashSimulator: NSObject, NSApplicationDelegate {
         subtitle.translatesAutoresizingMaskIntoConstraints = false
         sidebar.addSubview(subtitle)
 
-        let warningLabel = NSTextField(wrappingLabelWithString: "⚠ SIMULATION ONLY — NEVER APPLY THESE EFFECTS TO REAL DEVICES.")
-        warningLabel.font = .systemFont(ofSize: 9, weight: .bold)
-        warningLabel.textColor = NSColor(calibratedRed: 0.98, green: 0.75, blue: 0.30, alpha: 1)
-        warningLabel.backgroundColor = NSColor(calibratedRed: 0.20, green: 0.14, blue: 0.055, alpha: 1)
-        warningLabel.drawsBackground = true
-        warningLabel.wantsLayer = true
-        warningLabel.layer?.cornerRadius = 6
-        warningLabel.translatesAutoresizingMaskIntoConstraints = false
-        sidebar.addSubview(warningLabel)
 
         devicePopup = popup(["iPhone", "MacBook", "Desktop PC", "iPad"], selected: selectedDevice)
         toolPopup = popup(["Hammer", "Wrecking Ball", "Drop Test", "Kick"], selected: selectedTool)
         roomPopup = popup(["Studio", "Garage", "Concrete", "Bedroom", "Neon Lab"], selected: roomStyle)
 
-        addSection("DEVICE", control: devicePopup, to: sidebar, top: warningLabel, gap: 9)
+        addSection("DEVICE", control: devicePopup, to: sidebar, top: subtitle, gap: 28)
         addSection("TOOL", control: toolPopup, to: sidebar, top: devicePopup, gap: 38)
         addSection("ROOM", control: roomPopup, to: sidebar, top: toolPopup, gap: 38)
 
@@ -107,7 +113,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate {
         sceneView.allowsCameraControl = true
         sceneView.autoenablesDefaultLighting = true
         sceneView.antialiasingMode = .multisampling4X
-        sceneView.onStrike = { [weak self] in self?.statusLabel.stringValue = "Scene selected. Use STRIKE OBJECT to apply the chosen tool." }
+        sceneView.onInspect = { [weak self] point in self?.inspectObject(at: point) }
         root.addSubview(sceneView)
 
         NSLayoutConstraint.activate([
@@ -123,10 +129,6 @@ final class SmashSimulator: NSObject, NSApplicationDelegate {
             heading.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 25),
             subtitle.leadingAnchor.constraint(equalTo: heading.leadingAnchor),
             subtitle.topAnchor.constraint(equalTo: heading.bottomAnchor, constant: 4),
-            warningLabel.leadingAnchor.constraint(equalTo: heading.leadingAnchor),
-            warningLabel.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -18),
-            warningLabel.topAnchor.constraint(equalTo: subtitle.bottomAnchor, constant: 7),
-            warningLabel.heightAnchor.constraint(equalToConstant: 32),
             damageTitle.leadingAnchor.constraint(equalTo: heading.leadingAnchor),
             damageTitle.topAnchor.constraint(equalTo: roomPopup.bottomAnchor, constant: 27),
             damageSlider.leadingAnchor.constraint(equalTo: heading.leadingAnchor),
@@ -150,6 +152,31 @@ final class SmashSimulator: NSObject, NSApplicationDelegate {
         toolPopup.target = self; toolPopup.action = #selector(toolChanged(_:))
         roomPopup.target = self; roomPopup.action = #selector(roomChanged(_:))
         window.makeKeyAndOrderFront(nil)
+    }
+
+
+    private func inspectObject(at point: NSPoint) {
+        let hits = sceneView.hitTest(point, options: nil)
+        guard let hit = hits.first else {
+            statusLabel.stringValue = "Nothing selected. Click a device or room object to inspect it."
+            return
+        }
+
+        let objectName = hit.node.name ?? hit.node.geometry?.name ?? "Scene object"
+        statusLabel.stringValue = "Selected: \(objectName) — virtual scene inspection."
+        let marker = SCNNode(geometry: SCNSphere(radius: 0.055))
+        marker.name = "Selection marker"
+        marker.geometry?.firstMaterial = SCNMaterial()
+        marker.geometry?.firstMaterial?.diffuse.contents = NSColor.systemCyan
+        marker.geometry?.firstMaterial?.emission.contents = NSColor.systemCyan
+        marker.position = hit.worldCoordinates
+        scene.rootNode.addChildNode(marker)
+        marker.runAction(.sequence([
+            .scale(to: 1.8, duration: 0.12),
+            .wait(duration: 0.28),
+            .fadeOut(duration: 0.16),
+            .removeFromParentNode()
+        ]))
     }
 
     private func popup(_ items: [String], selected: String) -> NSPopUpButton {

@@ -45,7 +45,7 @@ jobs:
           tag_name: build-${{ github.run_number }}
           name: Smash Simulator build ${{ github.run_number }} (macOS 11+)
           target_commitish: main
-          body: Universal Intel and Apple Silicon app. Minimum supported version: macOS 11 Big Sur.
+          body: "Universal Intel and Apple Silicon app. Minimum supported version: macOS 11 Big Sur."
           files: dist/Smash-Simulator-macOS.zip
           make_latest: true
           overwrite_files: true
