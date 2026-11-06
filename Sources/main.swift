@@ -287,7 +287,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate {
         }
 
         root.position = SCNVector3(0, 0.02, 0)
-        root.physicsBody = SCNPhysicsBody(type: .dynamic, shape: nil)
+        let collisionSize: SCNVector3 = selectedDevice == "MacBook" ? SCNVector3(3.0, 2.0, 2.0) : (selectedDevice == "Desktop PC" ? SCNVector3(3.0, 2.0, 1.0) : (selectedDevice == "iPad" ? SCNVector3(2.3, 0.35, 3.0) : SCNVector3(1.3, 0.45, 2.5)))
+        let collisionGeometry = SCNBox(width: CGFloat(collisionSize.x), height: CGFloat(collisionSize.y), length: CGFloat(collisionSize.z), chamferRadius: 0.05)
+        root.physicsBody = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: collisionGeometry, options: nil))
         root.physicsBody?.mass = selectedDevice == "Desktop PC" ? 9 : 2.2
         root.physicsBody?.friction = 0.78
         root.physicsBody?.restitution = 0.12
