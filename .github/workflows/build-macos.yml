@@ -2,29 +2,54 @@ name: Build Smash Simulator (macOS)
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   workflow_dispatch:
+
 permissions:
   contents: write
+
+concurrency:
+  group: smash-simulator-macos
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+
+      - name: Show macOS Swift toolchain
+        run: |
+          swift --version
+          xcrun --sdk macosx --show-sdk-version
+
       - name: Build native app bundle
         run: |
           chmod +x build.sh
           ./build.sh
-      - name: Upload app bundle
+
+      - name: Verify app and archive
+        run: |
+          test -d "dist/Smash Simulator.app"
+          test -s "dist/Smash-Simulator-macOS.zip"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "dist/Smash Simulator.app/Contents/Info.plist"
+          unzip -tq "dist/Smash-Simulator-macOS.zip"
+
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: Smash-Simulator-macOS
           path: dist/Smash-Simulator-macOS.zip
           if-no-files-found: error
           retention-days: 30
-      - name: Attach app to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+
+      - name: Publish latest curl download
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: build-${{ github.run_number }}
+          name: Smash Simulator build ${{ github.run_number }}
+          target_commitish: main
+          body: Automated macOS build of Smash Simulator. Download Smash-Simulator-macOS.zip.
           files: dist/Smash-Simulator-macOS.zip
-          generate_release_notes: true
+          make_latest: true
+          overwrite_files: true
+          fail_on_unmatched_files: true
