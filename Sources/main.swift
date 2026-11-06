@@ -167,8 +167,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate {
         let marker = SCNNode(geometry: SCNSphere(radius: 0.055))
         marker.name = "Selection marker"
         marker.geometry?.firstMaterial = SCNMaterial()
-        marker.geometry?.firstMaterial?.diffuse.contents = NSColor.systemCyan
-        marker.geometry?.firstMaterial?.emission.contents = NSColor.systemCyan
+        let selectionColor = NSColor(calibratedRed: 0.12, green: 0.78, blue: 0.96, alpha: 1)
+        marker.geometry?.firstMaterial?.diffuse.contents = selectionColor
+        marker.geometry?.firstMaterial?.emission.contents = selectionColor
         marker.position = hit.worldCoordinates
         scene.rootNode.addChildNode(marker)
         marker.runAction(.sequence([
