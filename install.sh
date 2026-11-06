@@ -2,20 +2,26 @@
 set -euo pipefail
 
 OS_VERSION="$(/usr/bin/sw_vers -productVersion)"
-OS_MAJOR="\${OS_VERSION%%.*}"
-if [[ ! "$OS_MAJOR" =~ ^[0-9]+$ ]] || (( OS_MAJOR < 11 )); then
+OS_MAJOR="$(printf "%s\n" "$OS_VERSION" | /usr/bin/cut -d. -f1)"
+case "$OS_MAJOR" in
+  ""|*[!0-9]*)
+    echo "Could not read this Mac's macOS version: $OS_VERSION" >&2
+    exit 1
+    ;;
+esac
+if [ "$OS_MAJOR" -lt 11 ]; then
   echo "Smash Simulator requires macOS 11 Big Sur or newer. This Mac is running macOS $OS_VERSION." >&2
   exit 1
 fi
 
 RELEASE_URL="https://github.com/ttmeticks-source/softtap/releases/latest/download/Smash-Simulator-macOS.zip"
-WORK_DIR="$(mktemp -d "\${TMPDIR:-/tmp}/smash-simulator.XXXXXX")"
+WORK_DIR="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/smash-simulator.XXXXXX")"
 trap 'rm -rf "$WORK_DIR"' EXIT
 ARCHIVE="$WORK_DIR/Smash-Simulator-macOS.zip"
 APP_SOURCE="$WORK_DIR/Smash Simulator.app"
 
 echo "Downloading Smash Simulator for macOS $OS_VERSION..."
-curl --fail --location --show-error --retry 3 --progress-bar "$RELEASE_URL" --output "$ARCHIVE"
+/usr/bin/curl --fail --location --show-error --retry 3 --progress-bar "$RELEASE_URL" --output "$ARCHIVE"
 
 if ! /usr/bin/unzip -tq "$ARCHIVE" >/dev/null; then
   echo "Download finished, but the ZIP did not pass integrity checking." >&2
@@ -44,10 +50,10 @@ if [[ -w /Applications ]]; then
   INSTALL_DIR="/Applications"
 else
   INSTALL_DIR="$HOME/Applications"
-  mkdir -p "$INSTALL_DIR"
+  /bin/mkdir -p "$INSTALL_DIR"
 fi
 
-rm -rf "$INSTALL_DIR/Smash Simulator.app"
+/bin/rm -rf "$INSTALL_DIR/Smash Simulator.app"
 /usr/bin/ditto "$APP_SOURCE" "$INSTALL_DIR/Smash Simulator.app"
 echo "Installed for macOS 11+ ($ARCHS): $INSTALL_DIR/Smash Simulator.app"
-open "$INSTALL_DIR/Smash Simulator.app"
+/usr/bin/open "$INSTALL_DIR/Smash Simulator.app"

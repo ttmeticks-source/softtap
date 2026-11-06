@@ -62,11 +62,21 @@ final class SmashSimulator: NSObject, NSApplicationDelegate {
         subtitle.translatesAutoresizingMaskIntoConstraints = false
         sidebar.addSubview(subtitle)
 
+        let warningLabel = NSTextField(wrappingLabelWithString: "⚠ SIMULATION ONLY — NEVER APPLY THESE EFFECTS TO REAL DEVICES.")
+        warningLabel.font = .systemFont(ofSize: 9, weight: .bold)
+        warningLabel.textColor = NSColor(calibratedRed: 0.98, green: 0.75, blue: 0.30, alpha: 1)
+        warningLabel.backgroundColor = NSColor(calibratedRed: 0.20, green: 0.14, blue: 0.055, alpha: 1)
+        warningLabel.drawsBackground = true
+        warningLabel.wantsLayer = true
+        warningLabel.layer?.cornerRadius = 6
+        warningLabel.translatesAutoresizingMaskIntoConstraints = false
+        sidebar.addSubview(warningLabel)
+
         devicePopup = popup(["iPhone", "MacBook", "Desktop PC", "iPad"], selected: selectedDevice)
         toolPopup = popup(["Hammer", "Wrecking Ball", "Drop Test", "Kick"], selected: selectedTool)
         roomPopup = popup(["Studio", "Garage", "Concrete", "Bedroom", "Neon Lab"], selected: roomStyle)
 
-        addSection("DEVICE", control: devicePopup, to: sidebar, top: subtitle, gap: 28)
+        addSection("DEVICE", control: devicePopup, to: sidebar, top: warningLabel, gap: 9)
         addSection("TOOL", control: toolPopup, to: sidebar, top: devicePopup, gap: 38)
         addSection("ROOM", control: roomPopup, to: sidebar, top: toolPopup, gap: 38)
 
@@ -113,6 +123,10 @@ final class SmashSimulator: NSObject, NSApplicationDelegate {
             heading.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 25),
             subtitle.leadingAnchor.constraint(equalTo: heading.leadingAnchor),
             subtitle.topAnchor.constraint(equalTo: heading.bottomAnchor, constant: 4),
+            warningLabel.leadingAnchor.constraint(equalTo: heading.leadingAnchor),
+            warningLabel.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -18),
+            warningLabel.topAnchor.constraint(equalTo: subtitle.bottomAnchor, constant: 7),
+            warningLabel.heightAnchor.constraint(equalToConstant: 32),
             damageTitle.leadingAnchor.constraint(equalTo: heading.leadingAnchor),
             damageTitle.topAnchor.constraint(equalTo: roomPopup.bottomAnchor, constant: 27),
             damageSlider.leadingAnchor.constraint(equalTo: heading.leadingAnchor),
