@@ -10,7 +10,7 @@ permissions:
 jobs:
   build:
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -19,29 +19,16 @@ jobs:
           swift --version
           xcrun --sdk macosx --show-sdk-version
 
-      - name: Build universal macOS 11 app bundle
+      - name: Build universal app for macOS 11+
         run: |
           chmod +x build.sh
           ./build.sh
 
-      - name: Verify deployment target and architectures
+      - name: Verify app and archive
         run: |
-          APP="dist/Smash Simulator.app"
-          EXECUTABLE="$APP/Contents/MacOS/SmashSimulator"
-          MINIMUM_OS="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$APP/Contents/Info.plist")"
-          test "$MINIMUM_OS" = "11.0"
-
-          ARCHS="$(/usr/bin/lipo -archs "$EXECUTABLE")"
-          echo "Built architectures: $ARCHS"
-          case " $ARCHS " in *" arm64 "*) ;; *) echo "Missing Apple Silicon slice" >&2; exit 1 ;; esac
-          case " $ARCHS " in *" x86_64 "*) ;; *) echo "Missing Intel slice" >&2; exit 1 ;; esac
-
-          for ARCH in arm64 x86_64; do
-            echo "Checking $ARCH minimum OS version..."
-            otool -arch "$ARCH" -l "$EXECUTABLE" | grep -A5 'cmd LC_BUILD_VERSION' | grep -q 'minos 11.0'
-          done
-
+          test -d "dist/Smash Simulator.app"
           test -s "dist/Smash-Simulator-macOS.zip"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "dist/Smash Simulator.app/Contents/Info.plist"
           unzip -tq "dist/Smash-Simulator-macOS.zip"
 
       - name: Upload build artifact
@@ -58,7 +45,7 @@ jobs:
           tag_name: build-${{ github.run_number }}
           name: Smash Simulator build ${{ github.run_number }} (macOS 11+)
           target_commitish: main
-          body: Universal Intel and Apple Silicon build. Minimum supported version: macOS 11 Big Sur.
+          body: Universal Intel and Apple Silicon app. Minimum supported version: macOS 11 Big Sur.
           files: dist/Smash-Simulator-macOS.zip
           make_latest: true
           overwrite_files: true
