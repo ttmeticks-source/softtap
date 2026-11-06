@@ -1,0 +1,21 @@
+name: Build Smash Simulator (macOS)
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build native app bundle
+        run: |
+          chmod +x build.sh
+          ./build.sh
+      - name: Upload app bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: Smash-Simulator-macOS
+          path: dist/Smash-Simulator-macOS.zip
+          if-no-files-found: error
+          retention-days: 30
