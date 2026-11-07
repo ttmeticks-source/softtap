@@ -2148,7 +2148,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             band.lineWidth = CGFloat.random(in: 2...7)
             band.move(to: NSPoint(x: x, y: center.y - 150))
             band.line(to: NSPoint(x: x + CGFloat.random(in: -10...10), y: center.y + 150))
-            let colors: [NSColor] = [.systemRed, .systemGreen, .systemBlue, .systemCyan, .systemMagenta]
+            let colors: [NSColor] = [.systemRed, .systemGreen, .systemBlue, .systemCyan, .magenta]
             colors[index % colors.count].withAlphaComponent(0.70).setStroke()
             band.stroke()
         }
