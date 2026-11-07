@@ -18,6 +18,15 @@ Use these exact base names (44.1 kHz PCM WAV is recommended):
 - device_rattle.wav
 - glass_crackle.wav
 - debris_scatter.wav
+- sledgehammer_impact.wav
+- crowbar_creak.wav
+- drill_whirr.wav
+- saw_whine.wav
+- fire_roar.wav
+- water_spray.wav
+- steam_hiss.wav
+
+Alternate takes may also be supplied with an `_alt` suffix, for example `fire_roar_alt.wav`.
 
 Only add recordings you created or have permission to use. If a file is absent,
 the build keeps the generated placeholder for that sound.
