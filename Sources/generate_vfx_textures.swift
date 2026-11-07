@@ -42,7 +42,13 @@ func render(_ name: String, scratch: Bool, seed: Int) throws {
         ring.lineWidth = 2
         ring.stroke()
     }
-    NSColor(calibratedWhite: 0.86, alpha: scratch ? 0.68 : 0.78).setStroke()
+    // A dark inset edge plus a narrow bright edge keeps the authored mark readable
+    // at normal gameplay camera distance without using any material-failure model.
+    path.lineWidth = scratch ? 6.5 : 6.0
+    NSColor(calibratedRed: 0.055, green: 0.065, blue: 0.075, alpha: 0.88).setStroke()
+    path.stroke()
+    path.lineWidth = scratch ? 2.1 : 1.8
+    NSColor(calibratedWhite: 0.96, alpha: scratch ? 0.92 : 0.98).setStroke()
     path.stroke()
     image.unlockFocus()
     guard let data = image.tiffRepresentation,
