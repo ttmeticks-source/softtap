@@ -349,8 +349,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                 hit.worldCoordinates.z + normal.z * 0.30
             )
         } else {
-            let near = sceneView.unprojectPoint(SCNVector3(Float(point.x), Float(point.y), 0))
-            let far = sceneView.unprojectPoint(SCNVector3(Float(point.x), Float(point.y), 1))
+            let near = sceneView.unprojectPoint(SCNVector3(point.x, point.y, 0))
+            let far = sceneView.unprojectPoint(SCNVector3(point.x, point.y, 1))
             let direction = SCNVector3(far.x - near.x, far.y - near.y, far.z - near.z)
             if abs(direction.y) > 0.0001 {
                 let planeY: CGFloat = deskTopY + 0.85
@@ -364,7 +364,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         }
     }
 
-    private func animateToolImpact(intensity: Float) {
+    private func animateToolImpact(intensity: CGFloat) {
         guard let cursorToolNode else { return }
         cursorToolNode.removeAllActions()
         let wobble: CGFloat = min(0.42, 0.10 + intensity * 0.14)
@@ -382,9 +382,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
     private func applySelectedTool(at point: NSPoint, heldFor: TimeInterval) {
         let hits = sceneView.hitTest(point, options: nil)
-        guard let hit = hits.first(where: { !($0.node.name ?? "").hasPrefix("Cursor Tool") }),
+        guard let hit = hits.first(where: { !isCursorToolNode($0.node) }),
               let target = damageableOwner(for: hit.node),
-              let kind = target.userData?["damageKind"] as? String else {
+              let kind = damageKinds[ObjectIdentifier(target)] else {
             statusLabel.stringValue = "Aim at the desk, device or a room prop and click."
             return
         }
@@ -680,7 +680,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         let now = CACurrentMediaTime()
         guard now - lastImpactSoundTime > 0.10, contact.collisionImpulse > 0.45 else { return }
         lastImpactSoundTime = now
-        playImpactSound(intensity: Float(min(1.8, contact.collisionImpulse / 7.0)))
+        playImpactSound(intensity: min(1.8, contact.collisionImpulse / 7.0))
     }
 
     func renderer(_ renderer: SCNSceneRenderer, didSimulatePhysicsAtTime time: TimeInterval) {
@@ -815,14 +815,14 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         for index in 0..<8 {
             let panel = SCNNode(geometry: SCNBox(width: 1.8, height: 1.15, length: 0.07, chamferRadius: 0.035))
             panel.name = "Acoustic wall panel"
-            panel.position = SCNVector3(-6.3 + Float(index) * 1.8, 3.65, -8.75)
+            panel.position = SCNVector3(-6.3 + CGFloat(index) * 1.8, 3.65, -8.75)
             panel.geometry?.firstMaterial = material(NSColor(calibratedWhite: 0.13 + CGFloat(index % 3) * 0.035, alpha: 1), roughness: 0.93)
             panel.physicsBody = SCNPhysicsBody.static()
             scene.rootNode.addChildNode(panel)
         }
 
         let accent = NSColor(calibratedRed: 0.10, green: 0.70, blue: 0.98, alpha: 1)
-        for y: Float in [5.85, 6.15] {
+        for y: CGFloat in [5.85, 6.15] {
             let strip = SCNNode(geometry: SCNBox(width: 14.5, height: 0.035, length: 0.05, chamferRadius: 0))
             strip.name = "Room LED strip"
             strip.position = SCNVector3(0, y, -8.72)
@@ -862,8 +862,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         tag(top, kind: "desk")
         scene.rootNode.addChildNode(top)
 
-        for x: Float in [-3.35, 3.35] {
-            for z: Float in [-1.88, 1.88] {
+        for x: CGFloat in [-3.35, 3.35] {
+            for z: CGFloat in [-1.88, 1.88] {
                 let leg = SCNNode(geometry: SCNBox(width: 0.18, height: 1.25, length: 0.18, chamferRadius: 0.025))
                 leg.name = "Workbench leg"
                 leg.position = SCNVector3(x, 0.61, z)
