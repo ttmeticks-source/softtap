@@ -36,3 +36,12 @@ MIT
 
 
 The room now uses bundled procedural plaster and woven-carpet textures. Its back wall has a framed window opening onto a grass-only exterior backdrop. Clicking the window with the cursor tool triggers the authored shard swap directly; device strikes apply a SceneKit impulse.
+
+## Destruction sandbox update
+- Device casing meshes accumulate permanent vertex dents and broad panel bends across repeated impacts. Parts are designed to loosen and deform first; detachment has a much higher accumulated-damage threshold.
+- Room dressing now includes breakable cabinet doors and carcass, storage shelves and bins, chair components, crates, a speaker and lamp pieces. They dent and bend before detaching.
+- The tool rack includes a sledgehammer, crowbar, drill, saw, Fire Simulator and Water Blaster alongside the earlier tools. Fire and water are visual-only in-app particle effects; the Water Blaster extinguishes virtual flames.
+- Added Smartwatch, Digital Camera, Game Console, Bluetooth Speaker and Earbuds Case models with separate inspection-only internal assemblies.
+- Spawn Chaos Prop creates another physics object to damage; the HUD tracks score and hit count. Repeatedly damaging physics blocks fractures them into loose fragments.
+
+All fire, water, tools, damage and breakage are fictional effects inside the simulator. They do not interact with real devices or the physical environment.
