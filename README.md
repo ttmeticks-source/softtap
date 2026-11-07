@@ -20,7 +20,7 @@ The installer shows download progress, checks the macOS 11 minimum and both CPU 
 
 At launch, the app shows one 16+ self-confirmation notice. Choosing Quit exits. The prompt is an age declaration only; it does not scan faces or independently verify identity or age.
 
-The scene includes a full collidable room enclosure (floor, four walls and ceiling) and a workbench with a collidable tabletop, four legs, frame rails, two drawers and drawer pulls. The selected virtual device is positioned on the workbench. SceneKit camera orbit remains enabled, with the camera position clamped inside the room volume. Click objects in the 3D view to inspect them. A brief selection marker and status text identify the selected scene node. Use the sidebar to choose a virtual device, tool preset, room and impact setting.
+The SceneKit world uses a 120 Hz simulation step, centralized gravity/speed tuning, explicit collision categories and contact notifications for the existing dynamic bodies. Contact notifications update the status display only; they do not trigger damage or fracture. The scene includes a full collidable room enclosure (floor, four walls and ceiling) and a workbench with a collidable tabletop, four legs, frame rails, two drawers and drawer pulls. The selected virtual device is positioned on the workbench. SceneKit camera orbit remains enabled, with the camera position clamped inside the room volume. Click objects in the 3D view to inspect them. A brief selection marker and status text identify the selected scene node. Use the sidebar to choose a virtual device, tool preset, room and impact setting.
 
 ## Simulation scope
 

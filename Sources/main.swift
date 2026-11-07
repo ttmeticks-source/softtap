@@ -11,7 +11,7 @@ final class SmashSceneView: SCNView {
     }
 }
 
-final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDelegate {
+final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDelegate, SCNPhysicsContactDelegate {
     private var window: NSWindow!
     private var sceneView: SmashSceneView!
     private var scene = SCNScene()
@@ -223,7 +223,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
     private func buildScene() {
         scene = SCNScene()
-        scene.physicsWorld.gravity = SCNVector3(0, -9.8, 0)
+        configurePhysicsWorld()
         sceneView.scene = scene
 
         let camera = SCNNode()
@@ -253,6 +253,28 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         makeDevice()
     }
 
+    // Centralized SceneKit world tuning. A smaller fixed simulation step improves
+    // stability for the existing dynamic device and props while keeping all physics
+    // local to this scene. Contact callbacks are informational only.
+    private func configurePhysicsWorld() {
+        scene.physicsWorld.gravity = SCNVector3(0, -9.8, 0)
+        scene.physicsWorld.speed = 1.0
+        scene.physicsWorld.timeStep = 1.0 / 120.0
+        scene.physicsWorld.contactDelegate = self
+    }
+
+    func physicsWorld(_ world: SCNPhysicsWorld, didBegin contact: SCNPhysicsContact) {
+        guard statusLabel != nil else { return }
+        let impulse = contact.collisionImpulse
+        guard impulse > 0.35 else { return }
+        let first = contact.nodeA.name ?? "Object"
+        let second = contact.nodeB.name ?? "Surface"
+        statusLabel.stringValue = String(
+            format: "Scene contact: %@ ↔ %@  ·  impulse %.1f",
+            first, second, impulse
+        )
+    }
+
     private func addStaticBox(
         name: String,
         size: SCNVector3,
@@ -274,6 +296,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         node.physicsBody = SCNPhysicsBody(type: .static, shape: shape)
         node.physicsBody?.friction = 0.82
         node.physicsBody?.restitution = 0.08
+        node.physicsBody?.categoryBitMask = 2
+        node.physicsBody?.collisionBitMask = 0x7fffffff
 
         scene.rootNode.addChildNode(node)
         return node
@@ -501,8 +525,11 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         root.physicsBody?.mass = selectedDevice == "Desktop PC" ? 9 : 2.2
         root.physicsBody?.friction = 0.78
         root.physicsBody?.restitution = 0.12
-        root.physicsBody?.angularDamping = 0.42
+        root.physicsBody?.angularDamping = 0.52
+        root.physicsBody?.linearDamping = 0.12
         root.physicsBody?.categoryBitMask = 1
+        root.physicsBody?.collisionBitMask = 0x7fffffff
+        root.physicsBody?.contactTestBitMask = 0x7fffffff
         scene.rootNode.addChildNode(root)
         deviceRoot = root
     }
