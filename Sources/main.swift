@@ -39,9 +39,10 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private var deviceThudSound: NSSound?
     private var impactDecals: [SCNNode] = []
     private let maximumImpactDecals = 40
-    private let windowBreakThreshold: CGFloat = 1.8
+    private let windowBreakThreshold: CGFloat = 0.75
     private var windowIntactGlass: SCNNode?
     private var windowShardGroup: SCNNode?
+    private var windowCrackDecals: [SCNNode] = []
     private var windowHasBroken = false
     private var windowHitCount = 0
     private var internalParts: [SCNNode] = []
@@ -449,6 +450,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
               let shardGroup = windowShardGroup, !shardGroup.childNodes.isEmpty else { return }
         windowHasBroken = true
         intact.isHidden = true
+        intact.physicsBody = nil
+        windowCrackDecals.forEach { $0.removeFromParentNode() }
+        windowCrackDecals.removeAll()
         shardGroup.isHidden = false
         play(shatterSound)
 
@@ -475,10 +479,36 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         }]))
     }
 
+    // Large, staged glass overlays make the first tool strike visibly register before the setpiece swap.
+    private func addWindowCrack(at point: SCNVector3, normal: SCNVector3, stage: Int) {
+        guard let name = (1...8).map({ String(format: "crack_%02d", $0) }).randomElement(),
+              let url = Bundle.main.url(forResource: name, withExtension: "png"),
+              let image = NSImage(contentsOf: url) else { return }
+        let width: CGFloat = stage == 1 ? 0.92 : 1.28
+        let plane = SCNPlane(width: width, height: width * 0.92)
+        let material = SCNMaterial()
+        material.diffuse.contents = image
+        material.transparent.contents = image
+        material.isDoubleSided = true
+        material.lightingModel = .constant
+        material.blendMode = .alpha
+        plane.firstMaterial = material
+        let decal = SCNNode(geometry: plane)
+        decal.name = "Window crack overlay"
+        decal.position = SCNVector3(point.x + normal.x * 0.032,
+                                    point.y + normal.y * 0.032,
+                                    point.z + normal.z * 0.032)
+        let target = SCNVector3(point.x + normal.x, point.y + normal.y, point.z + normal.z)
+        decal.look(at: target, up: scene.rootNode.worldUp, localFront: SCNVector3(0, 0, 1))
+        decal.eulerAngles.z += CGFloat.random(in: 0...(2 * .pi))
+        decal.opacity = 1
+        scene.rootNode.addChildNode(decal)
+        windowCrackDecals.append(decal)
+    }
+
     // Cosmetic texture-plane overlays only; no material damage model is used.
     private func addImpactDecal(at point: SCNVector3, normal: SCNVector3, impulse: CGFloat) {
-        let isScratch = impulse > 3.0
-        if isScratch { play(scratchSound) } else { play(deviceThudSound) }
+        let isScratch = impulse > 7.5
         let names = isScratch
             ? (1...6).map { String(format: "scratch_%02d", $0) }
             : (1...8).map { String(format: "crack_%02d", $0) }
@@ -488,7 +518,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             let oldest = impactDecals.removeFirst()
             oldest.removeFromParentNode()
         }
-        let width = CGFloat.random(in: 0.16...0.34)
+        let width = CGFloat.random(in: 0.28...0.52) * (1 + min(0.55, impulse / 30))
         let plane = SCNPlane(width: width, height: width * CGFloat.random(in: 0.72...1.28))
         let material = SCNMaterial()
         material.diffuse.contents = NSImage(contentsOf: url)
@@ -508,8 +538,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         decal.opacity = 0.92
         scene.rootNode.addChildNode(decal)
         impactDecals.append(decal)
-        decal.runAction(.sequence([.wait(duration: 7.2), .fadeOut(duration: 0.8), .removeFromParentNode()]))
-        DispatchQueue.main.asyncAfter(deadline: .now() + 8.1) { [weak self, weak decal] in
+        decal.runAction(.sequence([.wait(duration: 14.0), .fadeOut(duration: 1.0), .removeFromParentNode()]))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15.2) { [weak self, weak decal] in
             guard let self, let decal else { return }
             self.impactDecals.removeAll { $0 === decal }
         }
@@ -1035,6 +1065,24 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         cursorToolPivot.addChildNode(head)
         cursorTool.isHidden = true
     }
+    private func hasAncestor(named name: String, startingAt node: SCNNode) -> Bool {
+        var current: SCNNode? = node
+        while let candidate = current {
+            if candidate.name == name { return true }
+            current = candidate.parent
+        }
+        return false
+    }
+
+    private func isInside(_ node: SCNNode, root: SCNNode) -> Bool {
+        var current: SCNNode? = node
+        while let candidate = current {
+            if candidate === root { return true }
+            current = candidate.parent
+        }
+        return false
+    }
+
     private func interactiveHit(at point: NSPoint) -> SCNHitTestResult? {
         sceneView.hitTest(point, options: nil).first { hit in
             var node: SCNNode? = hit.node
@@ -1060,19 +1108,21 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         aimTool(at: point)
         guard !cursorTool.isHidden else { return }
         if let hit = interactiveHit(at: point) {
-            if hit.node.name == "Breakable window glass" || hit.node.name == "Window frame 1" ||
-                hit.node.name == "Window frame 2" || hit.node.name == "Window frame 3" || hit.node.name == "Window frame 4" {
+            let touchesGlass = hasAncestor(named: "Breakable window glass", startingAt: hit.node)
+            let touchesFrame = hit.node.name?.hasPrefix("Window frame") == true
+            if !windowHasBroken && (touchesGlass || touchesFrame) {
                 windowHitCount += 1
-                addImpactDecal(at: hit.worldCoordinates, normal: hit.worldNormal, impulse: 2.5)
+                addWindowCrack(at: hit.worldCoordinates, normal: hit.worldNormal, stage: windowHitCount)
                 play(glassTapSound)
-                if windowHitCount >= 3 {
+                if windowHitCount >= 2 {
                     breakWindow(at: hit.worldCoordinates)
                 } else {
-                    statusLabel.stringValue = "Window crack \(windowHitCount)/3 — hit again to shatter."
+                    statusLabel.stringValue = "Visible glass crack — one more hit to scatter the shards."
                 }
-            } else if let device = deviceRoot, hit.node === device || hit.node.parent === device {
+            } else if let device = deviceRoot, isInside(hit.node, root: device) {
                 let power = CGFloat(5 + damageLevel * 18)
                 addImpactDecal(at: hit.worldCoordinates, normal: hit.worldNormal, impulse: CGFloat(damageLevel) * 5)
+                play(deviceThudSound)
                 device.physicsBody?.applyForce(SCNVector3(0, power * 0.07, power), asImpulse: true)
             }
         }
