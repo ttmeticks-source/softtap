@@ -1232,6 +1232,65 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             for side: CGFloat in [-1, 1] {
                 addShellBox("Tablet volume rocker", SCNVector3(0.035, 0.055, 0.32), SCNVector3(side * 1.12, 0.24, -0.75), metal, 0.012)
             }
+        case "Smartwatch":
+            addShellBox("Smartwatch titanium case", SCNVector3(1.02, 0.24, 1.20), SCNVector3(0, 0.20, 0), metal, 0.16)
+            addShellBox("Smartwatch OLED glass", SCNVector3(0.88, 0.035, 1.04), SCNVector3(0, 0.34, 0), glass, 0.13)
+            addShellBox("Smartwatch crown", SCNVector3(0.10, 0.18, 0.12), SCNVector3(0.57, 0.22, -0.12), metal, 0.035)
+            addShellBox("Smartwatch side button", SCNVector3(0.08, 0.12, 0.09), SCNVector3(0.57, 0.19, 0.18), dark, 0.025)
+            let watchBandTop = box(0.62, 0.08, 0.60, dark, SCNVector3(0, 0.08, -0.84), 0.08)
+            watchBandTop.name = "Watch upper strap"
+            addShell(watchBandTop)
+            let watchBandBottom = box(0.62, 0.08, 0.60, dark, SCNVector3(0, 0.08, 0.84), 0.08)
+            watchBandBottom.name = "Watch lower strap"
+            addShell(watchBandBottom)
+            for i in 0..<5 { addShellBox("Watch strap pin", SCNVector3(0.035, 0.025, 0.035), SCNVector3(-0.20 + CGFloat(i) * 0.10, 0.13, 1.02), metal, 0.01) }
+        case "Digital Camera":
+            addShellBox("Camera magnesium body", SCNVector3(1.72, 1.02, 0.82), SCNVector3(0, 0.55, 0), dark, 0.13)
+            addShellBox("Camera grip", SCNVector3(0.42, 0.88, 0.76), SCNVector3(-0.98, 0.55, 0.02), metal, 0.12)
+            let lens = SCNNode(geometry: SCNCylinder(radius: 0.39, height: 0.58))
+            lens.name = "Camera optical lens barrel"
+            lens.geometry?.firstMaterial = metal
+            lens.eulerAngles.x = .pi / 2
+            lens.position = SCNVector3(0.12, 0.56, 0.56)
+            addShell(lens)
+            let lensGlass = SCNNode(geometry: SCNCylinder(radius: 0.30, height: 0.035))
+            lensGlass.name = "Camera front glass"
+            lensGlass.geometry?.firstMaterial = glass
+            lensGlass.eulerAngles.x = .pi / 2
+            lensGlass.position = SCNVector3(0.12, 0.56, 0.87)
+            addShell(lensGlass)
+            addShellBox("Camera top hot shoe", SCNVector3(0.48, 0.08, 0.22), SCNVector3(0.12, 1.10, -0.04), metal, 0.02)
+            addShellBox("Camera rear LCD", SCNVector3(0.94, 0.56, 0.035), SCNVector3(0.12, 0.58, -0.43), glass, 0.035)
+            addShellSphere("Camera shutter button", radius: 0.065, position: SCNVector3(-0.58, 1.08, 0.20), surface: metal)
+        case "Game Console":
+            addShellBox("Game console chassis", SCNVector3(2.72, 0.52, 2.10), SCNVector3(0, 0.32, 0), dark, 0.18)
+            addShellBox("Console top vent panel", SCNVector3(1.70, 0.035, 1.55), SCNVector3(0.24, 0.60, -0.08), metal, 0.12)
+            for row in 0..<5 { for col in 0..<12 {
+                addShellBox("Console ventilation slot", SCNVector3(0.035, 0.012, 0.20), SCNVector3(-0.48 + CGFloat(col) * 0.13, 0.625, -0.62 + CGFloat(row) * 0.25), dark, 0.008)
+            }}
+            addShellBox("Console optical drive slot", SCNVector3(0.78, 0.025, 0.035), SCNVector3(0.78, 0.40, 1.055), metal, 0.01)
+            addShellSphere("Console power button", radius: 0.055, position: SCNVector3(-1.12, 0.42, 1.06), surface: metal)
+            addShellBox("Console front USB port", SCNVector3(0.18, 0.08, 0.025), SCNVector3(-0.78, 0.37, 1.065), metal, 0.01)
+        case "Bluetooth Speaker":
+            addShellCylinder("Speaker acoustic enclosure", radius: 0.58, height: 2.15, position: SCNVector3(0, 0.58, 0), surface: dark)
+            addShellCylinder("Speaker end cap", radius: 0.55, height: 0.10, position: SCNVector3(0, 0.58, 1.08), surface: metal)
+            for i in 0..<7 {
+                let driver = SCNNode(geometry: SCNTorus(ringRadius: 0.12 + CGFloat(i % 3) * 0.055, pipeRadius: 0.012))
+                driver.name = "Speaker driver trim"
+                driver.geometry?.firstMaterial = metal
+                driver.position = SCNVector3(-0.30 + CGFloat(i % 3) * 0.30, 0.58 + CGFloat(i / 3 - 1) * 0.25, 1.14)
+                addShell(driver)
+            }
+            addShellBox("Speaker control strip", SCNVector3(0.52, 0.07, 0.035), SCNVector3(0, 1.17, 1.12), metal, 0.025)
+        case "Earbuds Case":
+            addShellBox("Earbuds charging case lower shell", SCNVector3(1.18, 0.42, 0.88), SCNVector3(0, 0.24, 0), dark, 0.18)
+            addShellBox("Earbuds case lid", SCNVector3(1.16, 0.15, 0.84), SCNVector3(0, 0.53, -0.015), metal, 0.15)
+            addShellBox("Earbuds case hinge", SCNVector3(0.82, 0.09, 0.12), SCNVector3(0, 0.45, -0.40), dark, 0.04)
+            addShellSphere("Case status LED", radius: 0.025, position: SCNVector3(0, 0.24, 0.45), surface: metal)
+            for x: CGFloat in [-0.28, 0.28] {
+                addShellCylinder("Earbud stem", radius: 0.055, height: 0.34, position: SCNVector3(x, 0.70, 0.04), surface: metal)
+                addShellSphere("Earbud head", radius: 0.12, position: SCNVector3(x, 0.83, 0.04), surface: dark)
+            }
         default:
             root.addChildNode(box(1.25, 0.16, 2.45, metal, SCNVector3(0, 0.18, 0), 0.14))
             root.addChildNode(box(1.12, 0.035, 2.28, glass, SCNVector3(0, 0.28, 0), 0.12))
@@ -1315,6 +1374,34 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             for i in 0..<5 {
                 addInternalBox("Tablet connector", SCNVector3(0.10, 0.035, 0.22), SCNVector3(0.50, 0.42, -0.65 + CGFloat(i) * 0.28), silver)
             }
+        case "Smartwatch":
+            addInternalBox("Watch logic board", SCNVector3(0.46, 0.045, 0.55), SCNVector3(0, 0.30, 0), board)
+            addInternalBox("Watch OLED display stack", SCNVector3(0.72, 0.035, 0.82), SCNVector3(0, 0.37, 0), silver)
+            addInternalBox("Watch battery cell", SCNVector3(0.52, 0.045, 0.48), SCNVector3(0, 0.26, 0.25), graphite)
+            addInternalCylinder("Watch haptic motor", radius: 0.10, height: 0.08, position: SCNVector3(0.22, 0.33, -0.22), color: copper)
+        case "Digital Camera":
+            addInternalBox("Camera main PCB", SCNVector3(0.92, 0.06, 0.46), SCNVector3(-0.10, 0.54, -0.10), board)
+            addInternalBox("Camera image sensor", SCNVector3(0.38, 0.12, 0.34), SCNVector3(0.12, 0.56, 0.30), silver)
+            addInternalBox("Camera battery", SCNVector3(0.42, 0.48, 0.28), SCNVector3(-0.88, 0.52, -0.12), graphite)
+            addInternalBox("Camera image processor", SCNVector3(0.22, 0.08, 0.22), SCNVector3(0.48, 0.56, -0.12), copper)
+        case "Game Console":
+            addInternalBox("Console motherboard", SCNVector3(1.92, 0.06, 1.28), SCNVector3(0, 0.34, 0), board)
+            addInternalBox("Console APU heatsink", SCNVector3(0.62, 0.18, 0.62), SCNVector3(0.25, 0.47, -0.10), silver)
+            addInternalBox("Console power supply", SCNVector3(0.58, 0.22, 0.88), SCNVector3(-0.85, 0.34, 0.12), graphite)
+            addInternalCylinder("Console cooling fan", radius: 0.38, height: 0.08, position: SCNVector3(0.78, 0.47, -0.28), color: graphite)
+            addInternalBox("Console optical drive", SCNVector3(0.88, 0.12, 0.55), SCNVector3(0.70, 0.32, 0.55), silver)
+        case "Bluetooth Speaker":
+            addInternalBox("Speaker amplifier PCB", SCNVector3(0.22, 0.06, 0.82), SCNVector3(-0.32, 0.58, 0), board)
+            addInternalBox("Speaker lithium battery", SCNVector3(0.52, 0.22, 0.66), SCNVector3(0.22, 0.58, -0.12), graphite)
+            for x: CGFloat in [-0.30, 0.30] {
+                addInternalCylinder("Speaker driver magnet", radius: 0.18, height: 0.12, position: SCNVector3(x, 0.58, 0.40), color: silver)
+            }
+        case "Earbuds Case":
+            addInternalBox("Earbuds case charging PCB", SCNVector3(0.68, 0.035, 0.24), SCNVector3(0, 0.36, 0.12), board)
+            addInternalBox("Earbuds case battery", SCNVector3(0.56, 0.12, 0.42), SCNVector3(0, 0.28, -0.12), graphite)
+            for x: CGFloat in [-0.28, 0.28] {
+                addInternalCylinder("Earbud driver", radius: 0.07, height: 0.05, position: SCNVector3(x, 0.72, 0), color: silver)
+            }
         default:
             addInternalBox("Phone logic board", SCNVector3(0.34, 0.045, 0.92), SCNVector3(0.40, 0.37, -0.52), board)
             addInternalBox("Phone battery", SCNVector3(0.60, 0.05, 1.18), SCNVector3(-0.22, 0.36, 0.08), graphite)
@@ -1377,13 +1464,30 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             addInternalBox("Phone charging daughterboard", SCNVector3(0.40, 0.035, 0.12), SCNVector3(0, 0.40, 1.00), board)
             addInternalBox("Phone antenna flex", SCNVector3(0.045, 0.018, 0.68), SCNVector3(-0.48, 0.42, 0.10), silver, 0.22)
         }
-        let collisionSize: SCNVector3 = selectedDevice == "MacBook" ? SCNVector3(3.0, 1.94, 2.0) : (selectedDevice == "Desktop PC" ? SCNVector3(5.9, 2.15, 1.0) : (selectedDevice == "iPad" ? SCNVector3(2.3, 0.16, 3.0) : (selectedDevice == "TV" ? SCNVector3(3.84, 2.40, 0.34) : SCNVector3(1.3, 0.205, 2.5))))
+        let collisionSize: SCNVector3
+        switch selectedDevice {
+        case "MacBook": collisionSize = SCNVector3(3.0, 1.94, 2.0)
+        case "Desktop PC": collisionSize = SCNVector3(5.9, 2.15, 1.0)
+        case "iPad": collisionSize = SCNVector3(2.3, 0.16, 3.0)
+        case "TV": collisionSize = SCNVector3(3.84, 2.40, 0.34)
+        case "Smartwatch": collisionSize = SCNVector3(1.15, 0.30, 1.30)
+        case "Digital Camera": collisionSize = SCNVector3(2.15, 1.25, 1.05)
+        case "Game Console": collisionSize = SCNVector3(2.9, 0.65, 2.25)
+        case "Bluetooth Speaker": collisionSize = SCNVector3(1.30, 1.30, 2.35)
+        case "Earbuds Case": collisionSize = SCNVector3(1.35, 0.95, 1.10)
+        default: collisionSize = SCNVector3(1.3, 0.205, 2.5)
+        }
         let modelCenterY: CGFloat
         switch selectedDevice {
         case "MacBook": modelCenterY = 1.0825
         case "Desktop PC": modelCenterY = 1.10
         case "iPad": modelCenterY = 0.23
         case "TV": modelCenterY = 1.20
+        case "Smartwatch": modelCenterY = 0.32
+        case "Digital Camera": modelCenterY = 0.55
+        case "Game Console": modelCenterY = 0.32
+        case "Bluetooth Speaker": modelCenterY = 0.58
+        case "Earbuds Case": modelCenterY = 0.48
         default: modelCenterY = 0.2025
         }
         for child in root.childNodes {
