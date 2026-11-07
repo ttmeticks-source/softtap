@@ -871,6 +871,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             root.addChildNode(speaker)
         }
         deviceShellParts = root.childNodes
+        deviceShellParts.forEach { $0.isHidden = showingInternals }
 
         // Layered, stylized internal assemblies are separate scene nodes so the
         // casing can be hidden for an inspection view without changing the body physics.
@@ -1056,9 +1057,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                     statusLabel.stringValue = "Window crack \(windowHitCount)/3 — hit again to shatter."
                 }
             } else if let device = deviceRoot, hit.node === device || hit.node.parent === device {
-                let direction = SCNVector3(0, 0.35, 1)
                 let power = CGFloat(5 + damageLevel * 18)
-                device.physicsBody?.applyForce(SCNVector3(direction.x * power, direction.y * power, direction.z * power), asImpulse: true)
+                addImpactDecal(at: hit.worldCoordinates, normal: hit.worldNormal, impulse: CGFloat(damageLevel) * 5)
+                device.physicsBody?.applyForce(SCNVector3(0, power * 0.07, power), asImpulse: true)
             }
         }
         cursorToolPivot.removeAllActions()
