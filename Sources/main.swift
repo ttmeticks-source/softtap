@@ -252,20 +252,6 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
         let objectName = hit.node.name ?? hit.node.geometry?.name ?? "Scene object"
         statusLabel.stringValue = "Selected: \(objectName) — virtual scene inspection."
-        let marker = SCNNode(geometry: SCNSphere(radius: 0.055))
-        marker.name = "Selection marker"
-        marker.geometry?.firstMaterial = SCNMaterial()
-        let selectionColor = NSColor(calibratedRed: 0.12, green: 0.78, blue: 0.96, alpha: 1)
-        marker.geometry?.firstMaterial?.diffuse.contents = selectionColor
-        marker.geometry?.firstMaterial?.emission.contents = selectionColor
-        marker.position = hit.worldCoordinates
-        scene.rootNode.addChildNode(marker)
-        marker.runAction(.sequence([
-            .scale(to: 1.8, duration: 0.12),
-            .wait(duration: 0.28),
-            .fadeOut(duration: 0.16),
-            .removeFromParentNode()
-        ]))
     }
 
     private func popup(_ items: [String], selected: String) -> NSPopUpButton {
@@ -315,7 +301,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         view.allowsCameraControl = true
         view.autoenablesDefaultLighting = false
         view.antialiasingMode = .none
-        view.preferredFramesPerSecond = 15
+        view.preferredFramesPerSecond = 30
         view.delegate = self
         view.defaultCameraController.interactionMode = .orbitTurntable
         view.defaultCameraController.automaticTarget = false
@@ -351,7 +337,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         camera.camera?.wantsExposureAdaptation = false
         camera.camera?.bloomIntensity = 0
         camera.camera?.vignettingIntensity = 0
-        camera.camera?.screenSpaceAmbientOcclusionIntensity = 0.12
+        camera.camera?.screenSpaceAmbientOcclusionIntensity = 0
         camera.camera?.screenSpaceAmbientOcclusionRadius = 3.0
         camera.position = SCNVector3(0, 3.8, 7.2)
         camera.look(at: SCNVector3(0, 1.30, 0))
@@ -378,9 +364,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         key.light?.intensity = 1550
         key.light?.spotInnerAngle = 48
         key.light?.spotOuterAngle = 78
-        key.light?.castsShadow = true
+        key.light?.castsShadow = false
         key.light?.shadowRadius = 3
-        key.light?.shadowSampleCount = 4
+        key.light?.shadowSampleCount = 1
         key.light?.shadowColor = NSColor(calibratedWhite: 0.04, alpha: 0.55)
         key.position = SCNVector3(-3.2, 6.2, 4.6)
         key.look(at: SCNVector3(0, 1.0, 0))
@@ -465,13 +451,11 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         let touchesWindow = contact.nodeA.name == "Breakable window glass" || contact.nodeB.name == "Breakable window glass"
         DispatchQueue.main.async { [weak self] in
             guard let self, self.statusLabel != nil else { return }
-            if touchesDevice { self.detachNearestDevicePart(at: point) }
             self.statusLabel.stringValue = String(
                 format: "Scene contact: %@ ↔ %@  ·  impulse %.1f",
                 first, second, impulse
             )
             self.playSurfaceImpact(first: first, second: second, impulse: impulse, position: point)
-            self.addImpactDecal(at: point, normal: normal, impulse: impulse, surfaceName: first + " " + second)
             if touchesWindow && impulse >= self.windowBreakThreshold {
                 self.breakWindow(at: point)
             }
@@ -605,57 +589,6 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         windowCrackDecals.append(decal)
     }
 
-    // Cosmetic texture-plane overlays only; no material damage model is used.
-    private func addImpactDecal(at point: SCNVector3, normal: SCNVector3, impulse: CGFloat, surfaceName: String) {
-        let surface = surfaceName.lowercased()
-        let isGlass = surface.contains("glass") || surface.contains("window") || surface.contains("screen") || surface.contains("display")
-        let isSoft = surface.contains("floor") || surface.contains("carpet")
-        let isScratch = !isGlass && !isSoft &&
-            (impulse > 4.2 || surface.contains("wood") || surface.contains("desk") ||
-             surface.contains("workbench") || surface.contains("metal") || surface.contains("frame"))
-        let names: [String]
-        if isGlass {
-            names = (1...8).map { String(format: "crack_%02d", $0) }
-        } else if isSoft {
-            names = (1...4).map { String(format: "scuff_%02d", $0) }
-        } else if isScratch {
-            names = (1...6).map { String(format: "scratch_%02d", $0) }
-        } else {
-            names = (1...6).map { String(format: "dent_%02d", $0) }
-        }
-        guard let name = names.randomElement(),
-              let url = Bundle.main.url(forResource: name, withExtension: "png") else { return }
-        if impactDecals.count >= maximumImpactDecals {
-            let oldest = impactDecals.removeFirst()
-            oldest.removeFromParentNode()
-        }
-        let width = CGFloat.random(in: 0.28...0.52) * (1 + min(0.55, impulse / 30))
-        let plane = SCNPlane(width: width, height: width * CGFloat.random(in: 0.72...1.28))
-        let material = SCNMaterial()
-        material.diffuse.contents = NSImage(contentsOf: url)
-        material.transparent.contents = NSImage(contentsOf: url)
-        material.isDoubleSided = true
-        material.lightingModel = .constant
-        material.blendMode = .alpha
-        plane.firstMaterial = material
-        let decal = SCNNode(geometry: plane)
-        decal.name = "Impact VFX decal"
-        decal.position = SCNVector3(point.x + normal.x * 0.006,
-                                    point.y + normal.y * 0.006,
-                                    point.z + normal.z * 0.006)
-        let target = SCNVector3(point.x + normal.x, point.y + normal.y, point.z + normal.z)
-        decal.look(at: target, up: scene.rootNode.worldUp, localFront: SCNVector3(0, 0, 1))
-        decal.eulerAngles.z += CGFloat.random(in: 0...(2 * .pi))
-        decal.opacity = 0.92
-        scene.rootNode.addChildNode(decal)
-        impactDecals.append(decal)
-        decal.runAction(.sequence([.wait(duration: 14.0), .fadeOut(duration: 1.0), .removeFromParentNode()]))
-        DispatchQueue.main.asyncAfter(deadline: .now() + 15.2) { [weak self, weak decal] in
-            guard let self, let decal else { return }
-            self.impactDecals.removeAll { $0 === decal }
-        }
-    }
-
     private func addStaticBox(
         name: String,
         size: SCNVector3,
@@ -746,6 +679,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     }
 
     private func makeGrassField() {
+        // A textured ground plane gives the same outdoor backdrop without hundreds
+        // of separate grass-blade nodes.
         let groundMaterial = material(NSColor(calibratedRed: 0.105, green: 0.25, blue: 0.075, alpha: 1), roughness: 0.98)
         if let texture = Bundle.main.url(forResource: "grass_outside", withExtension: "png") {
             groundMaterial.diffuse.contents = NSImage(contentsOf: texture)
@@ -759,45 +694,14 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         ground.eulerAngles.x = -.pi / 2
         ground.position = SCNVector3(0, -0.20, -18.5)
         scene.rootNode.addChildNode(ground)
-        let colors = [
-            NSColor(calibratedRed: 0.12, green: 0.34, blue: 0.075, alpha: 1),
-            NSColor(calibratedRed: 0.19, green: 0.43, blue: 0.09, alpha: 1),
-            NSColor(calibratedRed: 0.25, green: 0.39, blue: 0.08, alpha: 1),
-            NSColor(calibratedRed: 0.10, green: 0.27, blue: 0.055, alpha: 1)
-        ]
-        let blades = colors.map { color -> SCNGeometry in
-            let cone = SCNCone(topRadius: 0.0015, bottomRadius: 0.012, height: 0.28)
-            cone.radialSegmentCount = 4
-            cone.firstMaterial = material(color, roughness: 0.98)
-            return cone
-        }
-        func sample(_ index: Int) -> CGFloat {
-            let value = (index &* 1664525 &+ 1013904223) & 0x7fffffff
-            return CGFloat(value % 10000) / 10000
-        }
-        for tuft in 0..<160 {
-            let x = -10.0 + sample(tuft * 7 + 3) * 20.0
-            let z = -10.0 - sample(tuft * 11 + 5) * 17.0
-            let count = 2 + Int(sample(tuft * 13 + 9) * 2)
-            for bladeIndex in 0..<count {
-                let blade = SCNNode(geometry: blades[(tuft + bladeIndex) % blades.count])
-                let height = 0.16 + sample(tuft * 19 + bladeIndex * 23 + 1) * 0.26
-                blade.scale = SCNVector3(1, height / 0.28, 1)
-                blade.position = SCNVector3(x + (sample(tuft * 29 + bladeIndex) - 0.5) * 0.12,
-                                            height * 0.5 - 0.19,
-                                            z + (sample(tuft * 31 + bladeIndex * 3) - 0.5) * 0.12)
-                blade.eulerAngles = SCNVector3(0, sample(tuft * 37 + bladeIndex) * .pi,
-                                               (sample(tuft * 41 + bladeIndex) - 0.5) * 0.55)
-                scene.rootNode.addChildNode(blade)
-            }
-        }
-        for index in 0..<5 {
+        let moundMaterial = material(NSColor(calibratedRed: 0.16, green: 0.32, blue: 0.08, alpha: 1), roughness: 1)
+        for index in 0..<3 {
             let mound = SCNSphere(radius: 1)
-            mound.firstMaterial = material(colors[index % colors.count], roughness: 1)
+            mound.firstMaterial = moundMaterial
             let node = SCNNode(geometry: mound)
             node.name = "Distant grassy mound"
-            node.scale = SCNVector3(2.6 + CGFloat(index % 2), 0.22, 0.65)
-            node.position = SCNVector3(-8 + CGFloat(index) * 4, -0.18, -27 + CGFloat(index % 2) * 1.2)
+            node.scale = SCNVector3(3.0, 0.20, 0.7)
+            node.position = SCNVector3(-7 + CGFloat(index) * 7, -0.18, -27)
             scene.rootNode.addChildNode(node)
         }
     }
@@ -831,14 +735,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         }
         addStaticBox(name: "Workshop pegboard", size: SCNVector3(0.08, 2.65, 4.15),
                      position: SCNVector3(9.72, 3.65, -1.45), surface: cabinet)
-        for row in 0..<10 {
-            for col in 0..<13 {
-                let hole = SCNNode(geometry: SCNSphere(radius: 0.018))
-                hole.geometry?.firstMaterial = trim
-                hole.position = SCNVector3(9.665, 2.55 + CGFloat(row) * 0.23, -3.35 + CGFloat(col) * 0.32)
-                scene.rootNode.addChildNode(hole)
-            }
-        }
+        // Keep the pegboard as one textured panel; hundreds of tiny hole meshes
+        // were expensive to render and added no meaningful interaction.
         for index in 0..<5 {
             let hook = SCNNode(geometry: SCNTorus(ringRadius: 0.09, pipeRadius: 0.018))
             hook.name = "Workshop peg hook"
@@ -1453,6 +1351,30 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         }
     }
 
+    // Brief, local flex at the struck component. The mesh returns to its original
+    // transform, avoiding the unstable part-detachment behavior from earlier builds.
+    private func bendDevicePart(_ part: SCNNode, intensity: CGFloat) {
+        let originalScale = part.scale
+        let originalRotation = part.eulerAngles
+        let amount = min(0.085, max(0.025, intensity * 0.085))
+        part.removeAction(forKey: "device-flex")
+        let flex = SCNAction.customAction(duration: 0.42) { node, elapsed in
+            let progress = min(1, max(0, elapsed / 0.42))
+            let bend = sin(progress * .pi)
+            node.scale = SCNVector3(
+                originalScale.x * (1 - amount * bend),
+                originalScale.y * (1 + amount * 0.45 * bend),
+                originalScale.z * (1 - amount * bend)
+            )
+            node.eulerAngles = SCNVector3(
+                originalRotation.x + amount * 0.55 * bend,
+                originalRotation.y,
+                originalRotation.z + amount * bend
+            )
+        }
+        part.runAction(flex, forKey: "device-flex")
+    }
+
     @objc private func toggleDeviceInternals() {
         showingInternals.toggle()
         deviceShellParts.forEach { $0.isHidden = showingInternals }
@@ -1625,8 +1547,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         let hits = sceneView.hitTest(point, options: nil).filter { hit in
             var node: SCNNode? = hit.node
             while let current = node {
-                if current.name == "Selection marker" || current.name == "Impact VFX decal" ||
-                    current.name == "Window crack overlay" || current.name == "Cursor tool" ||
+                if current.name == "Window crack overlay" || current.name == "Cursor tool" ||
                     current.name == "Swing pivot" {
                     return false
                 }
@@ -1677,11 +1598,10 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                 }
             } else if let device = deviceRoot, isInside(hit.node, root: device) {
                 let power = CGFloat(5 + damageLevel * 18)
-                addImpactDecal(at: hit.worldCoordinates, normal: hit.worldNormal, impulse: CGFloat(damageLevel) * 5, surfaceName: hit.node.name ?? "Device")
                 let strikeImpulse = CGFloat(damageLevel) * 5
                 if strikeImpulse > 4.2 { play(scratchSound) } else { play(deviceThudSound) }
                 playSpatial(strikeImpulse > 4.2 ? "surface_scratch" : "device_thud", at: hit.worldCoordinates, volume: 0.92)
-                if damageLevel > 0.28 { detachNearestDevicePart(at: hit.worldCoordinates) }
+                bendDevicePart(hit.node, intensity: CGFloat(damageLevel))
                 if damageLevel > 0.45 { play(deviceRattleSound) }
                 device.physicsBody?.applyForce(SCNVector3(0, power * 0.07, power), asImpulse: true)
             }
