@@ -60,6 +60,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private var detachedDeviceParts: [SCNNode] = []
     private var roomBreakables: [SCNNode] = []
     private var roomPropDamage: [ObjectIdentifier: CGFloat] = [:]
+    private var physicsBlockDamage: [ObjectIdentifier: CGFloat] = [:]
     private var deskBreakablePanels: [SCNNode] = []
     private var deskPanelDamage: [ObjectIdentifier: CGFloat] = [:]
     private var devicePartDamage: [ObjectIdentifier: CGFloat] = [:]
@@ -1068,6 +1069,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         detachedDeviceParts.removeAll()
         devicePartDamage.removeAll()
         roomPropDamage.removeAll()
+        physicsBlockDamage.removeAll()
         surfaceDamageMarks.forEach { $0.removeFromParentNode() }
         surfaceDamageMarks.removeAll()
         breakableComponents.removeAll()
@@ -1800,6 +1802,10 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         playSpatial("wood_knock", at: world, volume: 0.86)
     }
 
+    private func darkGripMaterial() -> SCNMaterial {
+        material(NSColor(calibratedRed: 0.055, green: 0.07, blue: 0.085, alpha: 1), roughness: 0.86)
+    }
+
     private var toolPower: CGFloat {
         switch selectedTool {
         case "Sledgehammer": return 2.25
@@ -2070,6 +2076,68 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         case "Plastic Spudger":
             head = SCNNode(geometry: SCNBox(width: 0.075, height: 0.40, length: 0.045, chamferRadius: 0.025))
             head.geometry?.firstMaterial = material(NSColor(calibratedRed: 0.18, green: 0.62, blue: 0.82, alpha: 1), roughness: 0.7)
+        case "Sledgehammer":
+            head = SCNNode(geometry: SCNBox(width: 0.62, height: 0.28, length: 0.24, chamferRadius: 0.055))
+            head.geometry?.firstMaterial = material(NSColor(calibratedWhite: 0.30, alpha: 1), roughness: 0.72)
+            for side: CGFloat in [-1, 1] {
+                let cap = SCNNode(geometry: SCNCylinder(radius: 0.13, height: 0.035))
+                cap.geometry?.firstMaterial = metal
+                cap.position = SCNVector3(side * 0.31, 0, 0)
+                cap.eulerAngles.z = .pi / 2
+                head.addChildNode(cap)
+            }
+        case "Crowbar":
+            head = SCNNode(geometry: SCNCylinder(radius: 0.045, height: 0.72))
+            head.geometry?.firstMaterial = material(NSColor(calibratedRed: 0.76, green: 0.18, blue: 0.10, alpha: 1), roughness: 0.32)
+            head.eulerAngles.z = .pi / 2
+            let claw = SCNNode(geometry: SCNCylinder(radius: 0.035, height: 0.28))
+            claw.geometry?.firstMaterial = metal
+            claw.position = SCNVector3(0.30, 0.11, 0)
+            claw.eulerAngles.z = 0.62
+            head.addChildNode(claw)
+        case "Drill":
+            head = SCNNode(geometry: SCNBox(width: 0.30, height: 0.38, length: 0.34, chamferRadius: 0.07))
+            head.geometry?.firstMaterial = material(NSColor(calibratedRed: 0.12, green: 0.46, blue: 0.30, alpha: 1), roughness: 0.42)
+            let chuck = SCNNode(geometry: SCNCylinder(radius: 0.055, height: 0.30))
+            chuck.geometry?.firstMaterial = metal
+            chuck.position = SCNVector3(0, 0.04, -0.28)
+            chuck.eulerAngles.x = .pi / 2
+            head.addChildNode(chuck)
+            let grip = SCNNode(geometry: SCNBox(width: 0.12, height: 0.30, length: 0.13, chamferRadius: 0.035))
+            grip.geometry?.firstMaterial = darkGripMaterial()
+            grip.position = SCNVector3(0, -0.30, 0.02)
+            head.addChildNode(grip)
+        case "Saw":
+            head = SCNNode(geometry: SCNCylinder(radius: 0.19, height: 0.055))
+            head.geometry?.firstMaterial = metal
+            head.eulerAngles.z = .pi / 2
+            for tooth in 0..<12 {
+                let angle = CGFloat(tooth) * (.pi * 2 / 12)
+                let spike = SCNNode(geometry: SCNCone(topRadius: 0, bottomRadius: 0.035, height: 0.075))
+                spike.geometry?.firstMaterial = metal
+                spike.position = SCNVector3(cos(angle) * 0.19, sin(angle) * 0.19, 0)
+                head.addChildNode(spike)
+            }
+        case "Fire Simulator":
+            head = SCNNode(geometry: SCNBox(width: 0.22, height: 0.30, length: 0.25, chamferRadius: 0.045))
+            head.geometry?.firstMaterial = material(NSColor(calibratedRed: 0.80, green: 0.22, blue: 0.06, alpha: 1), roughness: 0.38)
+            let nozzle = SCNNode(geometry: SCNCylinder(radius: 0.07, height: 0.22))
+            nozzle.geometry?.firstMaterial = metal
+            nozzle.position = SCNVector3(0, 0.04, -0.22)
+            nozzle.eulerAngles.x = .pi / 2
+            head.addChildNode(nozzle)
+        case "Water Blaster":
+            head = SCNNode(geometry: SCNBox(width: 0.25, height: 0.34, length: 0.30, chamferRadius: 0.06))
+            head.geometry?.firstMaterial = material(NSColor(calibratedRed: 0.08, green: 0.48, blue: 0.86, alpha: 1), roughness: 0.32)
+            let barrel = SCNNode(geometry: SCNCylinder(radius: 0.075, height: 0.34))
+            barrel.geometry?.firstMaterial = metal
+            barrel.position = SCNVector3(0, 0.10, -0.29)
+            barrel.eulerAngles.x = .pi / 2
+            head.addChildNode(barrel)
+            let tank = SCNNode(geometry: SCNBox(width: 0.20, height: 0.26, length: 0.18, chamferRadius: 0.04))
+            tank.geometry?.firstMaterial = material(NSColor(calibratedRed: 0.20, green: 0.66, blue: 0.92, alpha: 0.8), roughness: 0.22)
+            tank.position = SCNVector3(0, -0.24, 0.08)
+            head.addChildNode(tank)
         case "Suction Cup":
             head = SCNNode(geometry: SCNTorus(ringRadius: 0.12, pipeRadius: 0.035))
             head.geometry?.firstMaterial = material(NSColor(calibratedRed: 0.18, green: 0.25, blue: 0.28, alpha: 1), roughness: 0.28)
@@ -2137,35 +2205,45 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         aimTool(at: point)
         guard !cursorTool.isHidden else { return }
         if let hit = interactiveHit(at: point) {
-            let touchesGlass = hasAncestor(named: "Breakable window glass", startingAt: hit.node)
-            let touchesFrame = hit.node.name?.hasPrefix("Window frame") == true
-            if !windowHasBroken && (touchesGlass || touchesFrame) {
-                windowHitCount += 1
-                if touchesGlass, let glass = windowIntactGlass {
-                    addWindowCrack(at: hit.worldCoordinates, normal: hit.worldNormal, stage: windowHitCount, on: glass)
+            if selectedTool == "Fire Simulator" {
+                emitFire(on: hit.node, worldPoint: hit.worldCoordinates)
+            } else if selectedTool == "Water Blaster" {
+                sprayWater(at: hit.worldCoordinates, hitNode: hit.node)
+            } else {
+                let impact = CGFloat(damageLevel) * toolPower
+                let touchesGlass = hasAncestor(named: "Breakable window glass", startingAt: hit.node)
+                let touchesFrame = hit.node.name?.hasPrefix("Window frame") == true
+                if !windowHasBroken && (touchesGlass || touchesFrame) {
+                    windowHitCount += toolPower > 1.8 ? 2 : 1
+                    if touchesGlass, let glass = windowIntactGlass {
+                        addWindowCrack(at: hit.worldCoordinates, normal: hit.worldNormal, stage: min(2, windowHitCount), on: glass)
+                    }
+                    playSpatial("glass_tap", at: hit.worldCoordinates, volume: 0.9)
+                    if windowHitCount >= 2 {
+                        breakWindow(at: hit.worldCoordinates)
+                    } else {
+                        statusLabel.stringValue = "Visible glass crack — another hit will scatter the shards."
+                    }
+                } else if let device = deviceRoot, isInside(hit.node, root: device) {
+                    playSpatial(impact > 0.9 ? "surface_scratch" : "device_thud", at: hit.worldCoordinates, volume: 0.92)
+                    damageDevicePart(hit.node, at: hit.worldCoordinates, normal: hit.worldNormal, intensity: impact)
+                    if impact > 0.45 { playSpatial("device_rattle", at: hit.worldCoordinates, volume: 0.58) }
+                    let normal = hit.worldNormal
+                    let impulse = CGFloat(0.12) + impact * 0.16
+                    device.physicsBody?.applyForce(SCNVector3(-normal.x * impulse, -normal.y * impulse, -normal.z * impulse), asImpulse: true)
+                } else if let panel = deskBreakablePanels.first(where: { isInside(hit.node, root: $0) }) {
+                    damageDeskPanel(panel, at: hit.worldCoordinates, normal: hit.worldNormal, intensity: impact)
+                    playSpatial("wood_knock", at: hit.worldCoordinates, volume: 0.86)
+                } else if let prop = roomBreakables.first(where: { isInside(hit.node, root: $0) }) {
+                    damageRoomProp(prop, at: hit.worldCoordinates, normal: hit.worldNormal, intensity: impact)
+                } else if hit.node.name?.hasPrefix("Physics stack block") == true {
+                    let key = ObjectIdentifier(hit.node)
+                    let accumulated = (physicsBlockDamage[key] ?? 0) + impact * 0.30
+                    physicsBlockDamage[key] = accumulated
+                    addSurfaceDamage(at: hit.worldCoordinates, normal: hit.worldNormal, scratch: accumulated < 1.0, on: hit.node)
+                    deformImpactMesh(hit.node, worldPoint: hit.worldCoordinates, worldNormal: hit.worldNormal, intensity: impact)
+                    if accumulated >= 3.2 { breakPhysicsBlock(hit.node, at: hit.worldCoordinates, normal: hit.worldNormal) }
                 }
-                playSpatial("glass_tap", at: hit.worldCoordinates, volume: 0.9)
-                if windowHitCount == 1 {
-                    playSpatial("glass_crackle", at: hit.worldCoordinates, volume: 0.82)
-                }
-                if windowHitCount >= 2 {
-                    breakWindow(at: hit.worldCoordinates)
-                } else {
-                    statusLabel.stringValue = "Visible glass crack — one more hit to scatter the shards."
-                }
-            } else if let device = deviceRoot, isInside(hit.node, root: device) {
-                let strikeImpulse = CGFloat(damageLevel) * 5
-                playSpatial(strikeImpulse > 4.2 ? "surface_scratch" : "device_thud", at: hit.worldCoordinates, volume: 0.92)
-                damageDevicePart(hit.node, at: hit.worldCoordinates, normal: hit.worldNormal, intensity: CGFloat(damageLevel))
-                if damageLevel > 0.45 { playSpatial("device_rattle", at: hit.worldCoordinates, volume: 0.58) }
-                let normal = hit.worldNormal
-                let impulse = CGFloat(0.16 + damageLevel * 0.34)
-                device.physicsBody?.applyForce(SCNVector3(-normal.x * impulse, -normal.y * impulse, -normal.z * impulse), asImpulse: true)
-            } else if let panel = deskBreakablePanels.first(where: { isInside(hit.node, root: $0) }) {
-                damageDeskPanel(panel, at: hit.worldCoordinates, normal: hit.worldNormal, intensity: CGFloat(damageLevel))
-            } else if hit.node.name?.hasPrefix("Physics stack block") == true {
-                addSurfaceDamage(at: hit.worldCoordinates, normal: hit.worldNormal, scratch: damageLevel > 0.65, on: hit.node)
-                deformImpactMesh(hit.node, worldPoint: hit.worldCoordinates, worldNormal: hit.worldNormal, intensity: CGFloat(damageLevel))
             }
         }
         cursorToolPivot.removeAllActions()
@@ -2176,8 +2254,37 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         up.timingMode = .easeInEaseOut
         cursorToolPivot.runAction(.sequence([down, up]))
         play(swingSound)
-        statusLabel.stringValue = "Swing animation: " + selectedTool + " · virtual prop only."
+        statusLabel.stringValue = selectedTool == "Fire Simulator" ? "Virtual flame deployed." :
+            (selectedTool == "Water Blaster" ? "Water spray deployed." : "Swing: " + selectedTool + " · virtual prop damage.")
     }
+
+    private func breakPhysicsBlock(_ block: SCNNode, at point: SCNVector3, normal: SCNVector3) {
+        guard block.parent != nil, let box = block.geometry as? SCNBox else { return }
+        let world = block.presentation.worldPosition
+        let size = SCNVector3(box.width, box.height, box.length)
+        let material = box.firstMaterial ?? material(.gray, roughness: 0.72)
+        block.removeFromParentNode()
+        let fragmentSize = SCNVector3(size.x * 0.48, size.y * 0.48, size.z * 0.48)
+        for index in 0..<4 {
+            let fragment = SCNNode(geometry: SCNBox(width: fragmentSize.x, height: fragmentSize.y, length: fragmentSize.z, chamferRadius: 0.012))
+            fragment.name = "Physics block fragment"
+            fragment.geometry?.firstMaterial = material
+            fragment.position = SCNVector3(world.x + CGFloat(index % 2 - 1) * size.x * 0.24,
+                                           world.y + (index < 2 ? -1 : 1) * size.y * 0.20,
+                                           world.z + CGFloat(index / 2 - 1) * size.z * 0.22)
+            let body = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: fragment.geometry!, options: nil))
+            configureDynamicBody(body, mass: 0.16, friction: 0.68, restitution: 0.08, angularDamping: 0.34)
+            fragment.physicsBody = body
+            scene.rootNode.addChildNode(fragment)
+            let impulse = CGFloat.random(in: 0.20...0.48)
+            body.applyForce(SCNVector3(normal.x * impulse, max(0.10, normal.y * impulse), normal.z * impulse), asImpulse: true)
+            fragment.runAction(.sequence([.wait(duration: 12), .fadeOut(duration: 0.5), .removeFromParentNode()]))
+        }
+        physicsBlockDamage.removeValue(forKey: ObjectIdentifier(block))
+        playSpatial("device_thud", at: point, volume: 0.9)
+        statusLabel.stringValue = "Block fractured into four loose pieces."
+    }
+
     @objc private func strike() {
         guard let sceneView else { statusLabel.stringValue = "Start the 3D demo first."; return }
         swingTool(at: NSPoint(x: sceneView.bounds.midX, y: sceneView.bounds.midY))
