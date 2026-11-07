@@ -11,7 +11,7 @@ final class SmashSceneView: SCNView {
     }
 }
 
-final class SmashSimulator: NSObject, NSApplicationDelegate {
+final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDelegate {
     private var window: NSWindow!
     private var sceneView: SmashSceneView!
     private var scene = SCNScene()
@@ -25,6 +25,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate {
     private var toolPopup: NSPopUpButton!
     private var roomPopup: NSPopUpButton!
     private var damageSlider: NSSlider!
+    private let deskTopY: CGFloat = 1.26
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.activate(ignoringOtherApps: true)
@@ -113,6 +114,13 @@ final class SmashSimulator: NSObject, NSApplicationDelegate {
         sceneView.allowsCameraControl = true
         sceneView.autoenablesDefaultLighting = true
         sceneView.antialiasingMode = .multisampling4X
+        sceneView.delegate = self
+        sceneView.defaultCameraController.interactionMode = .orbitTurntable
+        sceneView.defaultCameraController.automaticTarget = false
+        sceneView.defaultCameraController.inertiaEnabled = true
+        sceneView.defaultCameraController.target = SCNVector3(0, 1.30, 0)
+        sceneView.defaultCameraController.minimumVerticalAngle = 8
+        sceneView.defaultCameraController.maximumVerticalAngle = 40
         sceneView.onInspect = { [weak self] point in self?.inspectObject(at: point) }
         root.addSubview(sceneView)
 
@@ -220,8 +228,10 @@ final class SmashSimulator: NSObject, NSApplicationDelegate {
 
         let camera = SCNNode()
         camera.camera = SCNCamera()
-        camera.position = SCNVector3(0, 3.6, 8.5)
-        camera.eulerAngles = SCNVector3(-0.22, 0, 0)
+        camera.position = SCNVector3(0, 3.8, 7.2)
+        camera.look(at: SCNVector3(0, 1.30, 0))
+        camera.camera?.zNear = 0.1
+        camera.camera?.zFar = 100
         scene.rootNode.addChildNode(camera)
         sceneView.pointOfView = camera
 
@@ -239,25 +249,170 @@ final class SmashSimulator: NSObject, NSApplicationDelegate {
         scene.rootNode.addChildNode(key)
 
         makeRoom()
+        makeDesk()
         makeDevice()
     }
 
+    private func addStaticBox(
+        name: String,
+        size: SCNVector3,
+        position: SCNVector3,
+        surface: SCNMaterial
+    ) -> SCNNode {
+        let geometry = SCNBox(
+            width: size.x,
+            height: size.y,
+            length: size.z,
+            chamferRadius: 0.025
+        )
+        geometry.firstMaterial = surface
+        let node = SCNNode(geometry: geometry)
+        node.name = name
+        node.position = position
+
+        let shape = SCNPhysicsShape(geometry: geometry, options: nil)
+        node.physicsBody = SCNPhysicsBody(type: .static, shape: shape)
+        node.physicsBody?.friction = 0.82
+        node.physicsBody?.restitution = 0.08
+
+        scene.rootNode.addChildNode(node)
+        return node
+    }
+
     private func makeRoom() {
-        let floor = SCNNode(geometry: SCNBox(width: 14, height: 0.18, length: 14, chamferRadius: 0))
-        floor.position = SCNVector3(0, -0.12, 0)
-        floor.geometry?.firstMaterial = material(roomColor(), roughness: 0.82)
-        floor.physicsBody = SCNPhysicsBody.static()
-        scene.rootNode.addChildNode(floor)
+        let floorMaterial = material(roomColor(), roughness: 0.88)
+        addStaticBox(
+            name: "Room floor",
+            size: SCNVector3(20, 0.20, 18),
+            position: SCNVector3(0, -0.10, 0),
+            surface: floorMaterial
+        )
 
-        let back = SCNNode(geometry: SCNBox(width: 14, height: 7, length: 0.12, chamferRadius: 0))
-        back.position = SCNVector3(0, 3.35, -5)
-        back.geometry?.firstMaterial = material(wallColor(), roughness: 0.95)
-        scene.rootNode.addChildNode(back)
+        // Complete the enclosure. All four walls and the ceiling have static collision shapes.
+        let wallMaterial = material(wallColor(), roughness: 0.95)
+        let boundaries: [(String, SCNVector3, SCNVector3)] = [
+            ("Back wall", SCNVector3(20, 7, 0.22), SCNVector3(0, 3.50, -8.90)),
+            ("Front wall", SCNVector3(20, 7, 0.22), SCNVector3(0, 3.50, 8.90)),
+            ("Left wall", SCNVector3(0.22, 7, 18), SCNVector3(-9.90, 3.50, 0)),
+            ("Right wall", SCNVector3(0.22, 7, 18), SCNVector3(9.90, 3.50, 0)),
+            ("Ceiling", SCNVector3(20, 0.20, 18), SCNVector3(0, 7.10, 0))
+        ]
 
-        let left = SCNNode(geometry: SCNBox(width: 0.12, height: 7, length: 10, chamferRadius: 0))
-        left.position = SCNVector3(-7, 3.35, 0)
-        left.geometry?.firstMaterial = material(wallColor(), roughness: 0.95)
-        scene.rootNode.addChildNode(left)
+        for (name, size, position) in boundaries {
+            addStaticBox(name: name, size: size, position: position, surface: wallMaterial)
+        }
+    }
+
+    private func makeDesk() {
+        let wood = material(
+            NSColor(calibratedRed: 0.30, green: 0.20, blue: 0.13, alpha: 1),
+            roughness: 0.84
+        )
+        let darkMetal = material(
+            NSColor(calibratedRed: 0.12, green: 0.15, blue: 0.18, alpha: 1),
+            roughness: 0.46
+        )
+        let brushedMetal = material(
+            NSColor(calibratedRed: 0.48, green: 0.53, blue: 0.58, alpha: 1),
+            roughness: 0.30
+        )
+
+        // One-piece tabletop.
+        addStaticBox(
+            name: "Workbench tabletop",
+            size: SCNVector3(7.6, 0.22, 4.6),
+            position: SCNVector3(0, deskTopY, 0),
+            surface: wood
+        )
+
+        // Four collidable supports, with the top of each leg tucked under the tabletop.
+        for x: CGFloat in [-3.35, 3.35] {
+            for z: CGFloat in [-1.95, 1.95] {
+                addStaticBox(
+                    name: "Workbench leg",
+                    size: SCNVector3(0.18, 1.26, 0.18),
+                    position: SCNVector3(x, 0.63, z),
+                    surface: darkMetal
+                )
+            }
+        }
+
+        // Front, rear and side rails tie the frame together.
+        addStaticBox(
+            name: "Desk front apron",
+            size: SCNVector3(6.55, 0.28, 0.14),
+            position: SCNVector3(0, 1.02, 2.12),
+            surface: darkMetal
+        )
+        addStaticBox(
+            name: "Desk rear apron",
+            size: SCNVector3(6.55, 0.28, 0.14),
+            position: SCNVector3(0, 1.02, -2.12),
+            surface: darkMetal
+        )
+        for x: CGFloat in [-3.22, 3.22] {
+            addStaticBox(
+                name: "Desk side apron",
+                size: SCNVector3(0.14, 0.28, 3.95),
+                position: SCNVector3(x, 1.02, 0),
+                surface: darkMetal
+            )
+        }
+
+        // Two separate drawer boxes and their visible front panels.
+        for x: CGFloat in [-1.30, 1.30] {
+            addStaticBox(
+                name: "Workbench drawer",
+                size: SCNVector3(1.48, 0.38, 1.08),
+                position: SCNVector3(x, 0.88, 1.12),
+                surface: wood
+            )
+            addStaticBox(
+                name: "Drawer front",
+                size: SCNVector3(1.48, 0.34, 0.07),
+                position: SCNVector3(x, 0.89, 1.69),
+                surface: brushedMetal
+            )
+
+            let pull = SCNNode(
+                geometry: SCNCylinder(radius: 0.035, height: 0.42)
+            )
+            pull.name = "Drawer pull"
+            pull.position = SCNVector3(x, 0.90, 1.75)
+            pull.eulerAngles.z = .pi / 2
+            pull.geometry?.firstMaterial = brushedMetal
+            let pullGeometry = pull.geometry!
+            pull.physicsBody = SCNPhysicsBody(
+                type: .static,
+                shape: SCNPhysicsShape(geometry: pullGeometry, options: nil)
+            )
+            scene.rootNode.addChildNode(pull)
+        }
+
+        // Small raised rear lip keeps loose props from sliding off the back.
+        addStaticBox(
+            name: "Workbench rear lip",
+            size: SCNVector3(7.2, 0.18, 0.12),
+            position: SCNVector3(0, deskTopY + 0.19, -2.20),
+            surface: darkMetal
+        )
+    }
+
+    // SceneKit's built-in orbit controller remains enabled, but its camera node is clamped
+    // every frame to a safe inset of the room volume.
+    func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
+        guard let camera = renderer.pointOfView else { return }
+
+        let current = camera.position
+        let clamped = SCNVector3(
+            min(9.20, max(-9.20, current.x)),
+            min(6.35, max(0.65, current.y)),
+            min(8.15, max(-8.15, current.z))
+        )
+
+        if current.x != clamped.x || current.y != clamped.y || current.z != clamped.z {
+            camera.position = clamped
+        }
     }
 
     private func roomColor() -> NSColor {
@@ -328,8 +483,19 @@ final class SmashSimulator: NSObject, NSApplicationDelegate {
             root.addChildNode(speaker)
         }
 
-        root.position = SCNVector3(0, 0.02, 0)
-        let collisionSize: SCNVector3 = selectedDevice == "MacBook" ? SCNVector3(3.0, 2.0, 2.0) : (selectedDevice == "Desktop PC" ? SCNVector3(3.0, 2.0, 1.0) : (selectedDevice == "iPad" ? SCNVector3(2.3, 0.35, 3.0) : SCNVector3(1.3, 0.45, 2.5)))
+        let collisionSize: SCNVector3 = selectedDevice == "MacBook" ? SCNVector3(3.0, 1.94, 2.0) : (selectedDevice == "Desktop PC" ? SCNVector3(3.0, 2.15, 1.0) : (selectedDevice == "iPad" ? SCNVector3(2.3, 0.16, 3.0) : SCNVector3(1.3, 0.205, 2.5)))
+        let modelCenterY: CGFloat
+        switch selectedDevice {
+        case "MacBook": modelCenterY = 1.0825
+        case "Desktop PC": modelCenterY = 1.10
+        case "iPad": modelCenterY = 0.23
+        default: modelCenterY = 0.2025
+        }
+        for child in root.childNodes {
+            child.position.y -= modelCenterY
+        }
+        let deskSurfaceY = deskTopY + 0.11
+        root.position = SCNVector3(0, deskSurfaceY + collisionSize.y / 2 + 0.015, 0)
         let collisionGeometry = SCNBox(width: CGFloat(collisionSize.x), height: CGFloat(collisionSize.y), length: CGFloat(collisionSize.z), chamferRadius: 0.05)
         root.physicsBody = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: collisionGeometry, options: nil))
         root.physicsBody?.mass = selectedDevice == "Desktop PC" ? 9 : 2.2
