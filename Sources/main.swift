@@ -1,17 +1,74 @@
 import AppKit
 import SceneKit
 import QuartzCore
+import AVFoundation
 
 final class SmashSceneView: SCNView {
-    var onInspect: ((NSPoint) -> Void)?
+    var onPointerMove: ((NSPoint) -> Void)?
+    var onPointerClick: ((NSPoint, TimeInterval) -> Void)?
+    var onOrbit: ((CGFloat, CGFloat) -> Void)?
+    var onZoom: ((CGFloat) -> Void)?
+
+    private var tracking: NSTrackingArea?
+    private var pressStartedAt: TimeInterval = 0
+    private var orbitPoint = NSPoint.zero
+
+    override func updateTrackingAreas() {
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseMoved, .mouseDragged, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        tracking = area
+        super.updateTrackingAreas()
+    }
+
+    private func localPoint(_ event: NSEvent) -> NSPoint {
+        convert(event.locationInWindow, from: nil)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        onPointerMove?(localPoint(event))
+        super.mouseMoved(with: event)
+    }
+
     override func mouseDown(with event: NSEvent) {
-        let point = convert(event.locationInWindow, from: nil)
-        onInspect?(point)
+        pressStartedAt = CACurrentMediaTime()
+        onPointerMove?(localPoint(event))
         super.mouseDown(with: event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        let held = max(0, CACurrentMediaTime() - pressStartedAt)
+        onPointerClick?(localPoint(event), held)
+        super.mouseUp(with: event)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        onPointerMove?(localPoint(event))
+        super.mouseDragged(with: event)
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        orbitPoint = localPoint(event)
+    }
+
+    override func rightMouseDragged(with event: NSEvent) {
+        let current = localPoint(event)
+        onOrbit?(current.x - orbitPoint.x, current.y - orbitPoint.y)
+        orbitPoint = current
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        onZoom?(event.scrollingDeltaY)
+        super.scrollWheel(with: event)
     }
 }
 
-final class SmashSimulator: NSObject, NSApplicationDelegate {
+final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDelegate, SCNPhysicsContactDelegate {
     private var window: NSWindow!
     private var sceneView: SmashSceneView!
     private var scene = SCNScene()
@@ -25,6 +82,26 @@ final class SmashSimulator: NSObject, NSApplicationDelegate {
     private var toolPopup: NSPopUpButton!
     private var roomPopup: NSPopUpButton!
     private var damageSlider: NSSlider!
+    private var cursorToolNode: SCNNode?
+    private var cameraNode: SCNNode?
+    private var cameraYaw: Float = 0
+    private var cameraPitch: Float = 0.27
+    private var cameraDistance: Float = 9.2
+    private var lastImpactSoundTime: TimeInterval = 0
+    private var debrisCount = 0
+    private let deskTopY: Float = 1.28
+    private let toolPower: [String: Float] = [
+        "Soft Tap": 0.38,
+        "Rubber Mallet": 0.62,
+        "Precision Hammer": 1.0,
+        "Heavy Hammer": 1.42,
+        "Wrench": 0.82,
+        "Impact Driver": 1.18,
+        "Energy Pulse": 1.62
+    ]
+    private let audioEngine = AVAudioEngine()
+    private let impactPlayer = AVAudioPlayerNode()
+    private var audioFormat: AVAudioFormat?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.activate(ignoringOtherApps: true)
@@ -32,6 +109,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
+        setupImpactAudio()
         buildWindow()
         buildScene()
     }
@@ -52,7 +130,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate {
                           backing: .buffered, defer: false)
         window.title = "Smash Simulator"
         window.center()
-        window.minSize = NSSize(width: 900, height: 620)
+        window.minSize = NSSize(width: 980, height: 660)
+        window.acceptsMouseMovedEvents = true
 
         let root = NSView()
         root.wantsLayer = true
@@ -79,7 +158,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate {
 
 
         devicePopup = popup(["iPhone", "MacBook", "Desktop PC", "iPad"], selected: selectedDevice)
-        toolPopup = popup(["Hammer", "Wrecking Ball", "Drop Test", "Kick"], selected: selectedTool)
+        toolPopup = popup(["Soft Tap", "Rubber Mallet", "Precision Hammer", "Heavy Hammer", "Wrench", "Impact Driver", "Energy Pulse"], selected: selectedTool)
         roomPopup = popup(["Studio", "Garage", "Concrete", "Bedroom", "Neon Lab"], selected: roomStyle)
 
         addSection("DEVICE", control: devicePopup, to: sidebar, top: subtitle, gap: 28)
@@ -95,12 +174,12 @@ final class SmashSimulator: NSObject, NSApplicationDelegate {
         damageSlider.translatesAutoresizingMaskIntoConstraints = false
         sidebar.addSubview(damageSlider)
 
-        let hit = makeButton("STRIKE OBJECT", action: #selector(strike))
-        let drop = makeButton("DROP FROM HEIGHT", action: #selector(dropObject))
+        let hit = makeButton("CENTER TEST HIT", action: #selector(strike))
+        let drop = makeButton("DROP TEST", action: #selector(dropObject))
         let reset = makeButton("RESET SCENE", action: #selector(resetScene))
         sidebar.addSubview(hit); sidebar.addSubview(drop); sidebar.addSubview(reset)
 
-        statusLabel = NSTextField(wrappingLabelWithString: "Ready. Choose a device, room and tool.")
+        statusLabel = NSTextField(wrappingLabelWithString: "Move the mouse to aim the selected 3D tool. Click briefly or hold for a stronger arcade hit.")
         statusLabel.font = .systemFont(ofSize: 11)
         statusLabel.textColor = NSColor(calibratedWhite: 0.68, alpha: 1)
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -110,10 +189,16 @@ final class SmashSimulator: NSObject, NSApplicationDelegate {
         sceneView.translatesAutoresizingMaskIntoConstraints = false
         sceneView.scene = scene
         sceneView.backgroundColor = NSColor(calibratedRed: 0.12, green: 0.15, blue: 0.20, alpha: 1)
-        sceneView.allowsCameraControl = true
-        sceneView.autoenablesDefaultLighting = true
+        sceneView.allowsCameraControl = false
+        sceneView.autoenablesDefaultLighting = false
         sceneView.antialiasingMode = .multisampling4X
-        sceneView.onInspect = { [weak self] point in self?.inspectObject(at: point) }
+        sceneView.preferredFramesPerSecond = 60
+        sceneView.rendersContinuously = true
+        sceneView.delegate = self
+        sceneView.onPointerMove = { [weak self] point in self?.moveCursorTool(to: point) }
+        sceneView.onPointerClick = { [weak self] point, held in self?.applyTool(at: point, heldFor: held) }
+        sceneView.onOrbit = { [weak self] dx, dy in self?.orbitCamera(dx: dx, dy: dy) }
+        sceneView.onZoom = { [weak self] delta in self?.zoomCamera(delta: delta) }
         root.addSubview(sceneView)
 
         NSLayoutConstraint.activate([
