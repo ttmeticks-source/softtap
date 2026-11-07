@@ -1176,15 +1176,16 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                 addInternalBox("Memory and power component", SCNVector3(0.12, 0.04, 0.08), SCNVector3(-0.55 + CGFloat(i) * 0.22, 0.40, -0.70), copper)
             }
         case "Desktop PC":
-            addInternalBox("PC motherboard", SCNVector3(0.62, 1.25, 0.045), SCNVector3(2.05, 0.86, 0.02), board)
-            addInternalBox("Graphics card", SCNVector3(0.56, 0.20, 0.66), SCNVector3(2.05, 0.55, 0.12), graphite)
-            addInternalBox("CPU heatsink", SCNVector3(0.30, 0.20, 0.30), SCNVector3(2.05, 1.03, 0.12), silver)
-            addInternalBox("Power supply", SCNVector3(0.60, 0.30, 0.62), SCNVector3(2.05, 0.28, 0.10), graphite)
+            let towerX: CGFloat = 2.52
+            addInternalBox("PC motherboard", SCNVector3(0.62, 1.25, 0.045), SCNVector3(towerX, 0.86, 0.02), board)
+            addInternalBox("Graphics card", SCNVector3(0.56, 0.20, 0.66), SCNVector3(towerX, 0.55, 0.12), graphite)
+            addInternalBox("CPU heatsink", SCNVector3(0.30, 0.20, 0.30), SCNVector3(towerX, 1.03, 0.12), silver)
+            addInternalBox("Power supply", SCNVector3(0.60, 0.30, 0.62), SCNVector3(towerX, 0.28, 0.10), graphite)
             for i in 0..<4 {
-                addInternalBox("RAM module", SCNVector3(0.07, 0.48, 0.045), SCNVector3(1.65 + CGFloat(i) * 0.12, 0.90, 0.06), copper)
+                addInternalBox("RAM module", SCNVector3(0.07, 0.48, 0.045), SCNVector3(towerX - 0.40 + CGFloat(i) * 0.12, 0.90, 0.06), copper)
             }
             for y: CGFloat in [0.48, 1.10] {
-                addInternalCylinder("Case fan", radius: 0.25, height: 0.06, position: SCNVector3(2.05, y, 0.32), color: graphite)
+                addInternalCylinder("Case fan", radius: 0.25, height: 0.06, position: SCNVector3(towerX, y, 0.32), color: graphite)
             }
         case "TV":
             addInternalBox("TV main logic board", SCNVector3(1.12, 0.055, 0.52), SCNVector3(0.82, 0.72, -0.02), board)
@@ -1587,6 +1588,17 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         handle.geometry?.firstMaterial = material(NSColor(calibratedRed: 0.32, green: 0.18, blue: 0.10, alpha: 1), roughness: 0.6)
         handle.position = SCNVector3(0, -0.27, 0)
         cursorToolPivot.addChildNode(handle)
+        // Molded rubber grip ribs and a metal ferrule add small manufactured details.
+        for index in 0..<5 {
+            let rib = SCNNode(geometry: SCNCylinder(radius: 0.050, height: 0.035))
+            rib.geometry?.firstMaterial = material(NSColor(calibratedRed: 0.075, green: 0.085, blue: 0.095, alpha: 1), roughness: 0.92)
+            rib.position = SCNVector3(0, -0.49 + CGFloat(index) * 0.085, 0)
+            cursorToolPivot.addChildNode(rib)
+        }
+        let ferrule = SCNNode(geometry: SCNCylinder(radius: 0.052, height: 0.055))
+        ferrule.geometry?.firstMaterial = metal
+        ferrule.position = SCNVector3(0, 0.075, 0)
+        cursorToolPivot.addChildNode(ferrule)
         let head: SCNNode
         switch selectedTool {
         case "Rubber Mallet":
