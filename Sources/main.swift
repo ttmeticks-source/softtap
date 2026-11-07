@@ -516,7 +516,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
     // Cosmetic texture-plane overlays only; no material damage model is used.
     private func addImpactDecal(at point: SCNVector3, normal: SCNVector3, impulse: CGFloat) {
-        let isScratch = impulse > 7.5
+        let isScratch = impulse > 4.2
         let names = isScratch
             ? (1...6).map { String(format: "scratch_%02d", $0) }
             : (1...8).map { String(format: "crack_%02d", $0) }
@@ -965,7 +965,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                 for z: CGFloat in [-0.20, 0.40] {
                     addShellBox("Desktop case foot", SCNVector3(0.12, 0.08, 0.12), SCNVector3(x, 0.025, z), dark)
                 }
-            })
+            }
         case "iPad":
             root.addChildNode(box(2.25, 0.12, 3.0, metal, SCNVector3(0, 0.22, 0)))
             root.addChildNode(box(2.08, 0.035, 2.78, glass, SCNVector3(0, 0.30, 0)))
@@ -1159,7 +1159,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             play(woodKnockSound)
         } else if contactNames.contains("device") || contactNames.contains("phone") ||
                     contactNames.contains("tablet") || contactNames.contains("laptop") {
-            play(deviceThudSound)
+            if impulse > 4.2 { play(scratchSound) } else { play(deviceThudSound) }
             if impulse > 1.8 { play(deviceRattleSound) }
         } else if contactNames.contains("floor") || contactNames.contains("carpet") {
             play(carpetThumpSound)
@@ -1285,7 +1285,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             } else if let device = deviceRoot, isInside(hit.node, root: device) {
                 let power = CGFloat(5 + damageLevel * 18)
                 addImpactDecal(at: hit.worldCoordinates, normal: hit.worldNormal, impulse: CGFloat(damageLevel) * 5)
-                play(deviceThudSound)
+                let strikeImpulse = CGFloat(damageLevel) * 5
+                if strikeImpulse > 4.2 { play(scratchSound) } else { play(deviceThudSound) }
                 if damageLevel > 0.45 { play(deviceRattleSound) }
                 device.physicsBody?.applyForce(SCNVector3(0, power * 0.07, power), asImpulse: true)
             }
