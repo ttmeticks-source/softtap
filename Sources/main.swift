@@ -434,13 +434,13 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             var direction = SCNVector3(p.x - impactPoint.x, p.y - impactPoint.y + 0.22, p.z - impactPoint.z)
             let length = max(0.001, sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z))
             direction = SCNVector3(direction.x / length, direction.y / length, direction.z / length)
-            let impulse = Float.random(in: 0.75...1.65)
+            let impulse = CGFloat.random(in: 0.75...1.65)
             body.applyForce(SCNVector3(direction.x * impulse, direction.y * impulse, direction.z * impulse), asImpulse: true)
             body.applyTorque(SCNVector4(Float.random(in: -1...1), Float.random(in: -1...1), Float.random(in: -1...1), Float.random(in: 0.7...2.2)), asImpulse: true)
             shard.runAction(.sequence([.wait(duration: 3.72), .fadeOut(duration: 0.28), .removeFromParentNode()]))
         }
         statusLabel?.stringValue = "Window setpiece triggered — authored shards scattering."
-        shardGroup.runAction(.sequence([.wait(duration: 4.15), .run { [weak self, weak shardGroup] in
+        shardGroup.runAction(.sequence([.wait(duration: 4.15), .run { [weak self, weak shardGroup] _ in
             shardGroup?.removeFromParentNode()
             self?.windowShardGroup = nil
         }]))
@@ -474,7 +474,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                                     point.z + normal.z * 0.006)
         let target = SCNVector3(point.x + normal.x, point.y + normal.y, point.z + normal.z)
         decal.look(at: target, up: scene.rootNode.worldUp, localFront: SCNVector3(0, 0, 1))
-        decal.eulerAngles.z += Float.random(in: 0...(2 * .pi))
+        decal.eulerAngles.z += CGFloat.random(in: 0...(2 * .pi))
         decal.opacity = 0.92
         scene.rootNode.addChildNode(decal)
         impactDecals.append(decal)
