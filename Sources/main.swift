@@ -997,6 +997,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         deviceRoot?.removeFromParentNode()
         detachedDeviceParts.forEach { $0.removeFromParentNode() }
         detachedDeviceParts.removeAll()
+        devicePartDamage.removeAll()
+        surfaceDamageMarks.forEach { $0.removeFromParentNode() }
+        surfaceDamageMarks.removeAll()
         breakableComponents.removeAll()
         internalParts.removeAll()
         deviceShellParts.removeAll()
@@ -1268,7 +1271,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             addInternalBox("Phone charging daughterboard", SCNVector3(0.40, 0.035, 0.12), SCNVector3(0, 0.40, 1.00), board)
             addInternalBox("Phone antenna flex", SCNVector3(0.045, 0.018, 0.68), SCNVector3(-0.48, 0.42, 0.10), silver, 0.22)
         }
-        let collisionSize: SCNVector3 = selectedDevice == "MacBook" ? SCNVector3(3.0, 1.94, 2.0) : (selectedDevice == "Desktop PC" ? SCNVector3(5.15, 2.15, 1.0) : (selectedDevice == "iPad" ? SCNVector3(2.3, 0.16, 3.0) : (selectedDevice == "TV" ? SCNVector3(3.84, 2.40, 0.34) : SCNVector3(1.3, 0.205, 2.5))))
+        let collisionSize: SCNVector3 = selectedDevice == "MacBook" ? SCNVector3(3.0, 1.94, 2.0) : (selectedDevice == "Desktop PC" ? SCNVector3(5.9, 2.15, 1.0) : (selectedDevice == "iPad" ? SCNVector3(2.3, 0.16, 3.0) : (selectedDevice == "TV" ? SCNVector3(3.84, 2.40, 0.34) : SCNVector3(1.3, 0.205, 2.5))))
         let modelCenterY: CGFloat
         switch selectedDevice {
         case "MacBook": modelCenterY = 1.0825
