@@ -1540,9 +1540,48 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             }
         }
         guard changed else { return }
-        var sources = [SCNGeometrySource(vertices: vertices)]
-        if let normals = geometry.sources(for: .normal).first { sources.append(normals) }
-        let dented = SCNGeometry(sources: sources, elements: geometry.elements)
+        // Rebuild normals from the deformed triangles so dents catch light as
+        // concave surfaces rather than remaining visually flat.
+        var normals = Array(repeating: SCNVector3(0, 0, 0), count: vertices.count)
+        for element in geometry.elements where element.primitiveType == .triangles {
+            let triangleIndexCount = element.primitiveCount * 3
+            element.data.withUnsafeBytes { raw in
+                guard let base = raw.baseAddress else { return }
+                func vertexIndex(_ index: Int) -> Int {
+                    let offset = index * element.bytesPerIndex
+                    if element.bytesPerIndex == 2 {
+                        var value: UInt16 = 0
+                        memcpy(&value, base.advanced(by: offset), 2)
+                        return Int(value)
+                    }
+                    var value: UInt32 = 0
+                    memcpy(&value, base.advanced(by: offset), 4)
+                    return Int(value)
+                }
+                for triangle in stride(from: 0, to: triangleIndexCount, by: 3) {
+                    let ia = vertexIndex(triangle), ib = vertexIndex(triangle + 1), ic = vertexIndex(triangle + 2)
+                    guard ia < vertices.count, ib < vertices.count, ic < vertices.count else { continue }
+                    let a = vertices[ia], b = vertices[ib], c = vertices[ic]
+                    let ab = SCNVector3(b.x - a.x, b.y - a.y, b.z - a.z)
+                    let ac = SCNVector3(c.x - a.x, c.y - a.y, c.z - a.z)
+                    let face = SCNVector3(ab.y * ac.z - ab.z * ac.y,
+                                          ab.z * ac.x - ab.x * ac.z,
+                                          ab.x * ac.y - ab.y * ac.x)
+                    for index in [ia, ib, ic] {
+                        normals[index] = SCNVector3(normals[index].x + face.x,
+                                                    normals[index].y + face.y,
+                                                    normals[index].z + face.z)
+                    }
+                }
+            }
+        }
+        for index in normals.indices {
+            let n = normals[index]
+            let length = max(0.0001, sqrt(n.x * n.x + n.y * n.y + n.z * n.z))
+            normals[index] = SCNVector3(n.x / length, n.y / length, n.z / length)
+        }
+        let dented = SCNGeometry(sources: [SCNGeometrySource(vertices: vertices), SCNGeometrySource(normals: normals)],
+                                 elements: geometry.elements)
         dented.materials = geometry.materials
         part.geometry = dented
     }
@@ -1582,6 +1621,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         let key = ObjectIdentifier(panel)
         let accumulated = (deskPanelDamage[key] ?? 0) + intensity * 0.55
         deskPanelDamage[key] = accumulated
+        deformImpactMesh(panel, worldPoint: point, worldNormal: normal, intensity: intensity * 0.72)
         addSurfaceDamage(at: point, normal: normal, scratch: accumulated < 1.2, on: panel)
         guard accumulated >= 2.8, panel.physicsBody?.type == .static, let geometry = panel.geometry else { return }
         let world = panel.presentation.worldPosition
