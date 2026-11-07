@@ -1150,19 +1150,30 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
     private func playSurfaceImpact(first: String, second: String, impulse: CGFloat) {
         let contactNames = (first + " " + second).lowercased()
+        let touchesDevice = contactNames.contains("device") || contactNames.contains("phone") ||
+            contactNames.contains("tablet") || contactNames.contains("laptop")
+        let touchesWood = contactNames.contains("wood") || contactNames.contains("desk") ||
+            contactNames.contains("drawer") || contactNames.contains("workbench") || contactNames.contains("tabletop")
+        let touchesMetal = contactNames.contains("metal") || contactNames.contains("frame") ||
+            contactNames.contains("pull") || contactNames.contains("hinge")
+        let touchesFloor = contactNames.contains("floor") || contactNames.contains("carpet")
+
         if contactNames.contains("glass") || contactNames.contains("window") {
             play(glassTapSound)
             if impulse > 1.0 { play(glassCrackleSound) }
-        } else if contactNames.contains("metal") || contactNames.contains("frame") || contactNames.contains("pull") {
+            if touchesDevice { play(deviceRattleSound) }
+        } else if touchesMetal {
             play(metalClangSound)
-        } else if contactNames.contains("wood") || contactNames.contains("desk") || contactNames.contains("drawer") {
+            if touchesDevice { play(deviceRattleSound) }
+        } else if touchesWood {
             play(woodKnockSound)
-        } else if contactNames.contains("device") || contactNames.contains("phone") ||
-                    contactNames.contains("tablet") || contactNames.contains("laptop") {
+            if touchesDevice { play(deviceRattleSound) }
+        } else if touchesFloor {
+            play(carpetThumpSound)
+            if touchesDevice { play(deviceRattleSound) }
+        } else if touchesDevice {
             if impulse > 4.2 { play(scratchSound) } else { play(deviceThudSound) }
             if impulse > 1.8 { play(deviceRattleSound) }
-        } else if contactNames.contains("floor") || contactNames.contains("carpet") {
-            play(carpetThumpSound)
         } else {
             play(plasticClickSound ?? impactSound)
         }
