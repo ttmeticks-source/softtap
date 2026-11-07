@@ -37,6 +37,13 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private var shatterSound: NSSound?
     private var scratchSound: NSSound?
     private var deviceThudSound: NSSound?
+    private var woodKnockSound: NSSound?
+    private var metalClangSound: NSSound?
+    private var plasticClickSound: NSSound?
+    private var carpetThumpSound: NSSound?
+    private var deviceRattleSound: NSSound?
+    private var glassCrackleSound: NSSound?
+    private var debrisScatterSound: NSSound?
     private var impactDecals: [SCNNode] = []
     private let maximumImpactDecals = 40
     private let windowBreakThreshold: CGFloat = 0.75
@@ -374,7 +381,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             format: "Scene contact: %@ ↔ %@  ·  impulse %.1f",
             first, second, impulse
         )
-        play(impactSound)
+        playSurfaceImpact(first: first, second: second, impulse: impulse)
         addImpactDecal(at: contact.contactPoint, normal: contact.contactNormal, impulse: impulse)
         let touchesWindow = contact.nodeA.name == "Breakable window glass" || contact.nodeB.name == "Breakable window glass"
         if touchesWindow && impulse >= windowBreakThreshold {
@@ -455,6 +462,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         windowCrackDecals.removeAll()
         shardGroup.isHidden = false
         play(shatterSound)
+        play(debrisScatterSound)
 
         for shard in shardGroup.childNodes {
             shard.isHidden = false
@@ -872,6 +880,27 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             deviceShellParts.append(node)
             root.addChildNode(node)
         }
+        func addShellBox(_ name: String, _ size: SCNVector3, _ pos: SCNVector3, _ surface: SCNMaterial, _ chamfer: CGFloat = 0.02) {
+            let node = box(size.x, size.y, size.z, surface, pos, chamfer)
+            node.name = name
+            addShell(node)
+        }
+        func addShellCylinder(_ name: String, radius: CGFloat, height: CGFloat, position: SCNVector3, surface: SCNMaterial) {
+            let geometry = SCNCylinder(radius: radius, height: height)
+            geometry.firstMaterial = surface
+            let node = SCNNode(geometry: geometry)
+            node.name = name
+            node.position = position
+            addShell(node)
+        }
+        func addShellSphere(_ name: String, radius: CGFloat, position: SCNVector3, surface: SCNMaterial) {
+            let geometry = SCNSphere(radius: radius)
+            geometry.firstMaterial = surface
+            let node = SCNNode(geometry: geometry)
+            node.name = name
+            node.position = position
+            addShell(node)
+        }
         func addInternalBox(_ name: String, _ size: SCNVector3, _ pos: SCNVector3, _ color: NSColor, _ roughness: CGFloat = 0.48) {
             let node = box(size.x, size.y, size.z, material(color, roughness: roughness), pos, 0.025)
             node.name = name
@@ -903,6 +932,19 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             for row in 0..<4 { for col in 0..<12 {
                 root.addChildNode(box(0.16, 0.018, 0.12, metal, SCNVector3(-1.25 + Float(col) * 0.23, 0.245, -0.62 + Float(row) * 0.18), 0.025))
             }}
+            addShellBox("MacBook trackpad", SCNVector3(0.92, 0.018, 0.58), SCNVector3(0, 0.245, 0.47), dark, 0.06)
+            addShellCylinder("MacBook hinge", radius: 0.052, height: 2.15, position: SCNVector3(0, 0.245, -0.88), surface: metal)
+            if let hinge = root.childNodes.last { hinge.eulerAngles.z = .pi / 2 }
+            addShellSphere("Display webcam", radius: 0.032, position: SCNVector3(0, 2.01, -0.79), surface: dark)
+            for x: CGFloat in [-1.36, 1.36] {
+                for i in 0..<10 {
+                    addShellBox("Keyboard speaker perforation", SCNVector3(0.018, 0.008, 0.045),
+                                SCNVector3(x, 0.235, -0.48 + CGFloat(i) * 0.105), dark, 0.006)
+                }
+            }
+            for x: CGFloat in [-1.48, 1.48] {
+                addShellBox("Laptop side port", SCNVector3(0.16, 0.055, 0.035), SCNVector3(x, 0.14, -0.35), dark, 0.012)
+            }
         case "Desktop PC":
             root.addChildNode(box(3.0, 1.85, 0.16, metal, SCNVector3(0, 1.25, -0.25)))
             root.addChildNode(box(2.78, 1.62, 0.035, glass, SCNVector3(0, 1.25, -0.145)))
@@ -910,9 +952,29 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             root.addChildNode(box(1.25, 0.12, 0.65, metal, SCNVector3(0, 0.12, -0.25)))
             root.addChildNode(box(0.82, 1.65, 0.8, dark, SCNVector3(2.05, 0.85, 0.1)))
             root.addChildNode(box(0.68, 1.48, 0.03, glass, SCNVector3(2.05, 0.85, 0.515)))
+            for y: CGFloat in [0.48, 1.12] {
+                let fan = SCNNode(geometry: SCNTorus(ringRadius: 0.17, pipeRadius: 0.022))
+                fan.name = "Desktop case fan ring"
+                fan.geometry?.firstMaterial = metal
+                fan.position = SCNVector3(2.05, y, 0.54)
+                addShell(fan)
+                addShellSphere("Desktop fan hub", radius: 0.055, position: SCNVector3(2.05, y, 0.56), surface: dark)
+            }
+            addShellSphere("Desktop power button", radius: 0.045, position: SCNVector3(2.05, 1.57, 0.55), surface: metal)
+            for x: CGFloat in [1.76, 2.34] {
+                for z: CGFloat in [-0.20, 0.40] {
+                    addShellBox("Desktop case foot", SCNVector3(0.12, 0.08, 0.12), SCNVector3(x, 0.025, z), dark)
+                }
+            })
         case "iPad":
             root.addChildNode(box(2.25, 0.12, 3.0, metal, SCNVector3(0, 0.22, 0)))
             root.addChildNode(box(2.08, 0.035, 2.78, glass, SCNVector3(0, 0.30, 0)))
+            addShellSphere("Tablet rear camera lens", radius: 0.055, position: SCNVector3(0.82, 0.33, -1.24), surface: dark)
+            addShellBox("Tablet charging port", SCNVector3(0.32, 0.045, 0.035), SCNVector3(0, 0.22, 1.50), dark)
+            for i in 0..<8 {
+                addShellBox("Tablet speaker perforation", SCNVector3(0.025, 0.012, 0.035),
+                            SCNVector3(-0.70 + CGFloat(i) * 0.20, 0.30, 1.46), dark, 0.006)
+            }
         default:
             root.addChildNode(box(1.25, 0.16, 2.45, metal, SCNVector3(0, 0.18, 0), 0.14))
             root.addChildNode(box(1.12, 0.035, 2.28, glass, SCNVector3(0, 0.28, 0), 0.12))
@@ -920,6 +982,17 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             speaker.geometry?.firstMaterial = metal
             speaker.position = SCNVector3(0, 0.305, 1.02)
             root.addChildNode(speaker)
+            addShellSphere("Phone rear camera lens one", radius: 0.060, position: SCNVector3(0.40, 0.105, -0.96), surface: dark)
+            addShellSphere("Phone rear camera lens two", radius: 0.052, position: SCNVector3(0.25, 0.105, -0.82), surface: dark)
+            addShellSphere("Phone flash", radius: 0.025, position: SCNVector3(0.51, 0.105, -0.80), surface: metal)
+            addShellBox("Phone charging port", SCNVector3(0.26, 0.035, 0.025), SCNVector3(0, 0.18, 1.23), dark, 0.01)
+            for side: CGFloat in [-1, 1] {
+                addShellBox("Phone side button", SCNVector3(0.035, 0.07, 0.22), SCNVector3(side * 0.635, 0.20, -0.30), metal, 0.012)
+            }
+            for i in 0..<8 {
+                addShellBox("Phone speaker perforation", SCNVector3(0.025, 0.010, 0.035),
+                            SCNVector3(-0.14 + CGFloat(i) * 0.04, 0.305, 1.02), dark, 0.005)
+            }
         }
         deviceShellParts = root.childNodes
         deviceShellParts.forEach { $0.isHidden = showingInternals }
@@ -970,6 +1043,47 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             }
         }
 
+        // Extra inspection-only board components, fasteners and cable blocks give each
+        // device a denser, layered interior when the shell is toggled off.
+        switch selectedDevice {
+        case "MacBook":
+            for i in 0..<12 {
+                addInternalBox("MacBook SMD component", SCNVector3(0.055, 0.024, 0.060),
+                               SCNVector3(-0.56 + CGFloat(i) * 0.10, 0.425, -0.68), copper, 0.32)
+            }
+            for i in 0..<5 {
+                addInternalBox("MacBook battery cell seam", SCNVector3(0.018, 0.014, 0.48),
+                               SCNVector3(-0.82 + CGFloat(i) * 0.41, 0.385, 0.48), silver, 0.38)
+            }
+            for x: CGFloat in [-0.48, 0.48] {
+                addInternalCylinder("Cooling fan center hub", radius: 0.065, height: 0.085,
+                                    position: SCNVector3(x, 0.43, -0.50), color: silver)
+            }
+        case "Desktop PC":
+            for i in 0..<8 {
+                addInternalCylinder("Motherboard capacitor", radius: 0.035, height: 0.11,
+                                    position: SCNVector3(1.77 + CGFloat(i % 4) * 0.15, 0.82, -0.08 + CGFloat(i / 4) * 0.18),
+                                    color: silver)
+            }
+            for i in 0..<6 {
+                addInternalBox("GPU memory chip", SCNVector3(0.10, 0.055, 0.10),
+                               SCNVector3(1.72 + CGFloat(i) * 0.11, 0.62, 0.22), copper, 0.32)
+            }
+            addInternalBox("Motherboard power connector", SCNVector3(0.10, 0.12, 0.16), SCNVector3(2.34, 1.18, 0.12), silver)
+        case "iPad":
+            for i in 0..<10 {
+                addInternalBox("Tablet board component", SCNVector3(0.07, 0.024, 0.08),
+                               SCNVector3(0.40 + CGFloat(i % 5) * 0.12, 0.425, -0.54 + CGFloat(i / 5) * 0.28), copper, 0.30)
+            }
+            addInternalBox("Tablet ribbon cable", SCNVector3(0.045, 0.018, 0.72), SCNVector3(0.20, 0.43, 0.48), silver, 0.18)
+        default:
+            for i in 0..<12 {
+                addInternalBox("Phone board microchip", SCNVector3(0.065, 0.024, 0.075),
+                               SCNVector3(0.20 + CGFloat(i % 4) * 0.11, 0.425, -0.72 + CGFloat(i / 4) * 0.22), copper, 0.30)
+            }
+            addInternalBox("Phone charging daughterboard", SCNVector3(0.40, 0.035, 0.12), SCNVector3(0, 0.40, 1.00), board)
+            addInternalBox("Phone antenna flex", SCNVector3(0.045, 0.018, 0.68), SCNVector3(-0.48, 0.42, 0.10), silver, 0.22)
+        }
         let collisionSize: SCNVector3 = selectedDevice == "MacBook" ? SCNVector3(3.0, 1.94, 2.0) : (selectedDevice == "Desktop PC" ? SCNVector3(3.0, 2.15, 1.0) : (selectedDevice == "iPad" ? SCNVector3(2.3, 0.16, 3.0) : SCNVector3(1.3, 0.205, 2.5)))
         let modelCenterY: CGFloat
         switch selectedDevice {
@@ -1034,6 +1148,26 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
     @objc private func damageChanged(_ sender: NSSlider) { damageLevel = Float(sender.floatValue) }
 
+    private func playSurfaceImpact(first: String, second: String, impulse: CGFloat) {
+        let contactNames = (first + " " + second).lowercased()
+        if contactNames.contains("glass") || contactNames.contains("window") {
+            play(glassTapSound)
+            if impulse > 1.0 { play(glassCrackleSound) }
+        } else if contactNames.contains("metal") || contactNames.contains("frame") || contactNames.contains("pull") {
+            play(metalClangSound)
+        } else if contactNames.contains("wood") || contactNames.contains("desk") || contactNames.contains("drawer") {
+            play(woodKnockSound)
+        } else if contactNames.contains("device") || contactNames.contains("phone") ||
+                    contactNames.contains("tablet") || contactNames.contains("laptop") {
+            play(deviceThudSound)
+            if impulse > 1.8 { play(deviceRattleSound) }
+        } else if contactNames.contains("floor") || contactNames.contains("carpet") {
+            play(carpetThumpSound)
+        } else {
+            play(plasticClickSound ?? impactSound)
+        }
+    }
+
     private func prepareAudio() {
         func load(_ name: String) -> NSSound? {
             guard let url = Bundle.main.url(forResource: name, withExtension: "wav") else { return nil }
@@ -1045,6 +1179,13 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         shatterSound = load("glass_shatter")
         scratchSound = load("surface_scratch")
         deviceThudSound = load("device_thud")
+        woodKnockSound = load("wood_knock")
+        metalClangSound = load("metal_clang")
+        plasticClickSound = load("plastic_click")
+        carpetThumpSound = load("carpet_thump")
+        deviceRattleSound = load("device_rattle")
+        glassCrackleSound = load("glass_crackle")
+        debrisScatterSound = load("debris_scatter")
     }
     private func play(_ sound: NSSound?) { sound?.stop(); sound?.play() }
     private func makeCursorTool() {
@@ -1135,6 +1276,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                 windowHitCount += 1
                 addWindowCrack(at: hit.worldCoordinates, normal: hit.worldNormal, stage: windowHitCount)
                 play(glassTapSound)
+                if windowHitCount == 1 { play(glassCrackleSound) }
                 if windowHitCount >= 2 {
                     breakWindow(at: hit.worldCoordinates)
                 } else {
@@ -1144,6 +1286,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                 let power = CGFloat(5 + damageLevel * 18)
                 addImpactDecal(at: hit.worldCoordinates, normal: hit.worldNormal, impulse: CGFloat(damageLevel) * 5)
                 play(deviceThudSound)
+                if damageLevel > 0.45 { play(deviceRattleSound) }
                 device.physicsBody?.applyForce(SCNVector3(0, power * 0.07, power), asImpulse: true)
             }
         }

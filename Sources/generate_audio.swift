@@ -73,4 +73,36 @@ try write("surface_scratch", duration: 0.62) { t, i in
     let rasp = noise(i) * (0.22 + 0.18 * sin(2 * .pi * 19 * t))
     return rasp * env
 }
-print("Generated six original in-app sound effects.")
+try write("wood_knock", duration: 0.42) { t, i in
+    let env = exp(-t * 13)
+    return (sin(2 * .pi * 92 * t) * 0.42 + sin(2 * .pi * 164 * t) * 0.20 + noise(i) * 0.07) * env
+}
+try write("metal_clang", duration: 0.72) { t, i in
+    let env = exp(-t * 4.4)
+    return (sin(2 * .pi * 812 * t) * 0.22 + sin(2 * .pi * 1268 * t) * 0.16 +
+            sin(2 * .pi * 1940 * t) * 0.10 + noise(i) * 0.035) * env
+}
+try write("plastic_click", duration: 0.16) { t, i in
+    let env = exp(-t * 48)
+    return (sin(2 * .pi * 780 * t) * 0.20 + noise(i) * 0.24) * env
+}
+try write("carpet_thump", duration: 0.38) { t, i in
+    let env = exp(-t * 12)
+    return (sin(2 * .pi * 54 * t) * 0.36 + noise(i) * 0.09) * env
+}
+try write("device_rattle", duration: 0.68) { t, i in
+    let pulse = t.truncatingRemainder(dividingBy: 0.082)
+    let env = exp(-t * 3.2) * exp(-pulse * 58)
+    return (noise(i) * 0.24 + sin(2 * .pi * 680 * t) * 0.10) * env
+}
+try write("glass_crackle", duration: 0.44) { t, i in
+    let env = exp(-t * 7.5)
+    let gate = noise(i / 520) > 0.12 ? 1.0 : 0.12
+    return (noise(i) * 0.30 + sin(2 * .pi * 2380 * t) * 0.11) * env * gate
+}
+try write("debris_scatter", duration: 0.92) { t, i in
+    let pulse = abs(sin(2 * .pi * 8.5 * t))
+    let env = exp(-t * 2.6) * pow(pulse, 7)
+    return (noise(i) * 0.28 + sin(2 * .pi * (920 + 360 * t) * t) * 0.12) * env
+}
+print("Generated thirteen original in-app sound effects.")
