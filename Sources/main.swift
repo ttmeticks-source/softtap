@@ -549,14 +549,14 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             shard.isHidden = false
             guard let geometry = shard.geometry else { continue }
             let body = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: geometry, options: nil))
-            configureDynamicBody(body, mass: 0.075, friction: 0.34, restitution: 0.08, angularDamping: 0.18)
+            configureDynamicBody(body, mass: 0.075, friction: 0.42, restitution: 0.025, angularDamping: 0.48)
             shard.physicsBody = body
 
             let p = shard.presentation.worldPosition
             var direction = SCNVector3(p.x - impactPoint.x, p.y - impactPoint.y + 0.22, p.z - impactPoint.z)
             let length = max(0.001, sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z))
             direction = SCNVector3(direction.x / length, direction.y / length, direction.z / length)
-            let impulse = CGFloat.random(in: 0.75...1.65)
+            let impulse = CGFloat.random(in: 0.28...0.72)
             body.applyForce(SCNVector3(direction.x * impulse, direction.y * impulse, direction.z * impulse), asImpulse: true)
             body.applyTorque(SCNVector4(Float.random(in: -1...1), Float.random(in: -1...1), Float.random(in: -1...1), Float.random(in: 0.7...2.2)), asImpulse: true)
             shard.runAction(.sequence([.wait(duration: 3.72), .fadeOut(duration: 0.28), .removeFromParentNode()]))
@@ -1233,16 +1233,17 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                                     position: SCNVector3(x, 0.43, -0.50), color: silver)
             }
         case "Desktop PC":
+            let towerX: CGFloat = 2.52
             for i in 0..<8 {
                 addInternalCylinder("Motherboard capacitor", radius: 0.035, height: 0.11,
-                                    position: SCNVector3(1.77 + CGFloat(i % 4) * 0.15, 0.82, -0.08 + CGFloat(i / 4) * 0.18),
+                                    position: SCNVector3(towerX - 0.28 + CGFloat(i % 4) * 0.15, 0.82, -0.08 + CGFloat(i / 4) * 0.18),
                                     color: silver)
             }
             for i in 0..<6 {
                 addInternalBox("GPU memory chip", SCNVector3(0.10, 0.055, 0.10),
-                               SCNVector3(1.72 + CGFloat(i) * 0.11, 0.62, 0.22), copper, 0.32)
+                               SCNVector3(towerX - 0.30 + CGFloat(i) * 0.11, 0.62, 0.22), copper, 0.32)
             }
-            addInternalBox("Motherboard power connector", SCNVector3(0.10, 0.12, 0.16), SCNVector3(2.34, 1.18, 0.12), silver)
+            addInternalBox("Motherboard power connector", SCNVector3(0.10, 0.12, 0.16), SCNVector3(towerX + 0.29, 1.18, 0.12), silver)
         case "TV":
             for i in 0..<14 {
                 addInternalBox("TV board microcomponent", SCNVector3(0.07, 0.028, 0.075),
@@ -1599,6 +1600,12 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         ferrule.geometry?.firstMaterial = metal
         ferrule.position = SCNVector3(0, 0.075, 0)
         cursorToolPivot.addChildNode(ferrule)
+        for side: CGFloat in [-1, 1] {
+            let fastener = SCNNode(geometry: SCNSphere(radius: 0.012))
+            fastener.geometry?.firstMaterial = metal
+            fastener.position = SCNVector3(side * 0.046, -0.02, 0)
+            cursorToolPivot.addChildNode(fastener)
+        }
         let head: SCNNode
         switch selectedTool {
         case "Rubber Mallet":
