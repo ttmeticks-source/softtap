@@ -11,6 +11,7 @@ mkdir -p "$MACOS" "$RES" "dist/Smash.iconset"
 swift Sources/generate_vfx_textures.swift "$RES"
 swift Sources/generate_window_shards.swift "$RES/window_shards.scn"
 swift Sources/generate_environment_textures.swift "$RES"
+swift Sources/generate_audio.swift "$RES"
 
 cat > "dist/make_icon.swift" <<'SWIFT'
 import AppKit

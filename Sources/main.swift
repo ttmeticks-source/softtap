@@ -33,6 +33,10 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private var cursorToolPivot = SCNNode()
     private var swingSound: NSSound?
     private var impactSound: NSSound?
+    private var glassTapSound: NSSound?
+    private var shatterSound: NSSound?
+    private var scratchSound: NSSound?
+    private var deviceThudSound: NSSound?
     private var impactDecals: [SCNNode] = []
     private let maximumImpactDecals = 40
     private let windowBreakThreshold: CGFloat = 1.8
@@ -288,6 +292,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         key.light?.spotInnerAngle = 48
         key.light?.spotOuterAngle = 78
         key.light?.castsShadow = true
+        key.light?.shadowRadius = 7
+        key.light?.shadowSampleCount = 16
+        key.light?.shadowColor = NSColor(calibratedWhite: 0.04, alpha: 0.55)
         key.position = SCNVector3(-3.2, 6.2, 4.6)
         key.look(at: SCNVector3(0, 1.0, 0))
         scene.rootNode.addChildNode(key)
@@ -298,6 +305,16 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         fill.light?.color = NSColor(calibratedRed: 0.45, green: 0.66, blue: 1, alpha: 1)
         fill.position = SCNVector3(4.2, 3.1, -3.8)
         scene.rootNode.addChildNode(fill)
+        let rim = SCNNode()
+        rim.light = SCNLight()
+        rim.light?.type = .spot
+        rim.light?.intensity = 680
+        rim.light?.color = NSColor(calibratedRed: 0.35, green: 0.72, blue: 0.88, alpha: 1)
+        rim.light?.spotInnerAngle = 38
+        rim.light?.spotOuterAngle = 66
+        rim.position = SCNVector3(0, 4.8, -6.8)
+        rim.look(at: SCNVector3(0, 1.3, 0))
+        scene.rootNode.addChildNode(rim)
 
         makeRoom()
         makeDesk()
@@ -367,6 +384,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     // Authored one-shot window setpiece: swap visibility, release prebuilt meshes, then clean up.
     private func makeWindowSetpiece() {
         windowHasBroken = false
+        windowHitCount = 0
         let center = SCNVector3(0, 2.55, -8.72)
         let frameMaterial = material(NSColor(calibratedRed: 0.12, green: 0.15, blue: 0.19, alpha: 1), roughness: 0.42)
         let frameParts: [(SCNVector3, SCNVector3)] = [
@@ -432,6 +450,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         windowHasBroken = true
         intact.isHidden = true
         shardGroup.isHidden = false
+        play(shatterSound)
 
         for shard in shardGroup.childNodes {
             shard.isHidden = false
@@ -459,6 +478,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     // Cosmetic texture-plane overlays only; no material damage model is used.
     private func addImpactDecal(at point: SCNVector3, normal: SCNVector3, impulse: CGFloat) {
         let isScratch = impulse > 3.0
+        if isScratch { play(scratchSound) } else { play(deviceThudSound) }
         let names = isScratch
             ? (1...6).map { String(format: "scratch_%02d", $0) }
             : (1...8).map { String(format: "crack_%02d", $0) }
@@ -850,6 +870,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             speaker.position = SCNVector3(0, 0.305, 1.02)
             root.addChildNode(speaker)
         }
+        deviceShellParts = root.childNodes
 
         // Layered, stylized internal assemblies are separate scene nodes so the
         // casing can be hidden for an inspection view without changing the body physics.
@@ -962,8 +983,16 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     @objc private func damageChanged(_ sender: NSSlider) { damageLevel = Float(sender.floatValue) }
 
     private func prepareAudio() {
-        swingSound = NSSound(contentsOfFile: "/System/Library/Sounds/Pop.aiff", byReference: true)
-        impactSound = NSSound(contentsOfFile: "/System/Library/Sounds/Glass.aiff", byReference: true)
+        func load(_ name: String) -> NSSound? {
+            guard let url = Bundle.main.url(forResource: name, withExtension: "wav") else { return nil }
+            return NSSound(contentsOf: url, byReference: false)
+        }
+        swingSound = load("tool_swing")
+        impactSound = load("device_tap")
+        glassTapSound = load("glass_tap")
+        shatterSound = load("glass_shatter")
+        scratchSound = load("surface_scratch")
+        deviceThudSound = load("device_thud")
     }
     private func play(_ sound: NSSound?) { sound?.stop(); sound?.play() }
     private func makeCursorTool() {
@@ -1018,8 +1047,14 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         if let hit = sceneView.hitTest(point, options: nil).first {
             if hit.node.name == "Breakable window glass" || hit.node.name == "Window frame 1" ||
                 hit.node.name == "Window frame 2" || hit.node.name == "Window frame 3" || hit.node.name == "Window frame 4" {
-                breakWindow(at: hit.worldCoordinates)
-                statusLabel.stringValue = "Direct tool hit — window setpiece triggered."
+                windowHitCount += 1
+                addImpactDecal(at: hit.worldCoordinates, normal: hit.worldNormal, impulse: 2.5)
+                play(glassTapSound)
+                if windowHitCount >= 3 {
+                    breakWindow(at: hit.worldCoordinates)
+                } else {
+                    statusLabel.stringValue = "Window crack \(windowHitCount)/3 — hit again to shatter."
+                }
             } else if let device = deviceRoot, hit.node === device || hit.node.parent === device {
                 let direction = SCNVector3(0, 0.35, 1)
                 let power = CGFloat(5 + damageLevel * 18)
