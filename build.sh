@@ -55,7 +55,7 @@ for ARCH in arm64 x86_64; do
     echo "Compiling for ${ARCH}, minimum macOS 11.0..."
     xcrun --sdk macosx swiftc -O -sdk "$SDK_PATH" \
         -target "${ARCH}-apple-macos11.0" \
-        -framework AppKit -framework SceneKit -framework QuartzCore \
+        -framework AppKit -framework SceneKit -framework QuartzCore -framework AVFoundation \
         Sources/main.swift -o "$MACOS/SmashSimulator-${ARCH}"
 done
 xcrun lipo -create \
