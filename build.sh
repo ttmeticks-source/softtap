@@ -9,6 +9,7 @@ RES="$CONTENTS/Resources"
 rm -rf "dist"
 mkdir -p "$MACOS" "$RES" "dist/Smash.iconset"
 swift Sources/generate_vfx_textures.swift "$RES"
+swift Sources/generate_window_shards.swift "$RES/window_shards.scn"
 
 cat > "dist/make_icon.swift" <<'SWIFT'
 import AppKit

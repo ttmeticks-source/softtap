@@ -35,6 +35,10 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private var impactSound: NSSound?
     private var impactDecals: [SCNNode] = []
     private let maximumImpactDecals = 40
+    private let windowBreakThreshold: CGFloat = 1.8
+    private var windowIntactGlass: SCNNode?
+    private var windowShardGroup: SCNNode?
+    private var windowHasBroken = false
     private var damageLevel: Float = 0.72
     private var roomStyle = "Studio"
     private var statusLabel: NSTextField!
@@ -290,6 +294,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         makeDesk()
         makeDevice()
         makePhysicsProps()
+        makeWindowSetpiece()
         makeCursorTool()
         prepareAudio()
     }
@@ -344,6 +349,101 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         )
         play(impactSound)
         addImpactDecal(at: contact.contactPoint, normal: contact.contactNormal, impulse: impulse)
+        let touchesWindow = contact.nodeA.name == "Breakable window glass" || contact.nodeB.name == "Breakable window glass"
+        if touchesWindow && impulse >= windowBreakThreshold {
+            breakWindow(at: contact.contactPoint)
+        }
+    }
+
+    // Authored one-shot window setpiece: swap visibility, release prebuilt meshes, then clean up.
+    private func makeWindowSetpiece() {
+        windowHasBroken = false
+        let center = SCNVector3(0, 2.55, -1.72)
+        let frameMaterial = material(NSColor(calibratedRed: 0.12, green: 0.15, blue: 0.19, alpha: 1), roughness: 0.42)
+        let frameParts: [(SCNVector3, SCNVector3)] = [
+            (SCNVector3(2.62, 0.12, 0.14), SCNVector3(0, 0.86, 0)),
+            (SCNVector3(2.62, 0.12, 0.14), SCNVector3(0, -0.86, 0)),
+            (SCNVector3(0.12, 1.60, 0.14), SCNVector3(-1.25, 0, 0)),
+            (SCNVector3(0.12, 1.60, 0.14), SCNVector3(1.25, 0, 0))
+        ]
+        for (index, part) in frameParts.enumerated() {
+            let geometry = SCNBox(width: CGFloat(part.0.x), height: CGFloat(part.0.y), length: CGFloat(part.0.z), chamferRadius: 0.025)
+            geometry.firstMaterial = frameMaterial
+            let frame = SCNNode(geometry: geometry)
+            frame.name = "Window frame \(index + 1)"
+            frame.position = SCNVector3(center.x + part.1.x, center.y + part.1.y, center.z + part.1.z)
+            frame.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(geometry: geometry, options: nil))
+            if let body = frame.physicsBody { configureStaticBody(body, friction: 0.72, restitution: 0.02) }
+            scene.rootNode.addChildNode(frame)
+        }
+
+        let glass = SCNNode(geometry: SCNPlane(width: 2.38, height: 1.58))
+        glass.name = "Breakable window glass"
+        glass.position = center
+        let glassMaterial = SCNMaterial()
+        glassMaterial.diffuse.contents = NSColor(calibratedRed: 0.34, green: 0.68, blue: 0.82, alpha: 0.24)
+        glassMaterial.emission.contents = NSColor(calibratedRed: 0.035, green: 0.10, blue: 0.14, alpha: 1)
+        glassMaterial.transparency = 0.30
+        glassMaterial.isDoubleSided = true
+        glassMaterial.lightingModel = .physicallyBased
+        glassMaterial.roughness.contents = 0.12
+        glassMaterial.metalness.contents = 0.08
+        glass.geometry?.firstMaterial = glassMaterial
+        glass.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(geometry: glass.geometry!, options: nil))
+        if let body = glass.physicsBody {
+            configureStaticBody(body, friction: 0.22, restitution: 0.04)
+            body.contactTestBitMask = dynamicCategoryMask
+        }
+        scene.rootNode.addChildNode(glass)
+        windowIntactGlass = glass
+
+        let shardGroup = SCNNode()
+        shardGroup.name = "Window authored shard set"
+        shardGroup.position = center
+        guard let assetURL = Bundle.main.url(forResource: "window_shards", withExtension: "scn"),
+              let authoredScene = try? SCNScene(url: assetURL, options: nil) else {
+            statusLabel?.stringValue = "Window shard asset could not be loaded."
+            return
+        }
+        for authoredShard in authoredScene.rootNode.childNodes {
+            let shard = authoredShard.clone()
+            shard.isHidden = true
+            shard.name = authoredShard.name ?? "Window shard"
+            shardGroup.addChildNode(shard)
+        }
+        shardGroup.isHidden = true
+        scene.rootNode.addChildNode(shardGroup)
+        windowShardGroup = shardGroup
+    }
+
+    private func breakWindow(at impactPoint: SCNVector3) {
+        guard !windowHasBroken, let intact = windowIntactGlass,
+              let shardGroup = windowShardGroup, !shardGroup.childNodes.isEmpty else { return }
+        windowHasBroken = true
+        intact.isHidden = true
+        shardGroup.isHidden = false
+
+        for shard in shardGroup.childNodes {
+            shard.isHidden = false
+            guard let geometry = shard.geometry else { continue }
+            let body = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: geometry, options: nil))
+            configureDynamicBody(body, mass: 0.075, friction: 0.34, restitution: 0.08, angularDamping: 0.18)
+            shard.physicsBody = body
+
+            let p = shard.presentation.worldPosition
+            var direction = SCNVector3(p.x - impactPoint.x, p.y - impactPoint.y + 0.22, p.z - impactPoint.z)
+            let length = max(0.001, sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z))
+            direction = SCNVector3(direction.x / length, direction.y / length, direction.z / length)
+            let impulse = Float.random(in: 0.75...1.65)
+            body.applyForce(SCNVector3(direction.x * impulse, direction.y * impulse, direction.z * impulse), asImpulse: true)
+            body.applyTorque(SCNVector4(Float.random(in: -1...1), Float.random(in: -1...1), Float.random(in: -1...1), Float.random(in: 0.7...2.2)), asImpulse: true)
+            shard.runAction(.sequence([.wait(duration: 3.72), .fadeOut(duration: 0.28), .removeFromParentNode()]))
+        }
+        statusLabel?.stringValue = "Window setpiece triggered — authored shards scattering."
+        shardGroup.runAction(.sequence([.wait(duration: 4.15), .run { [weak self, weak shardGroup] in
+            shardGroup?.removeFromParentNode()
+            self?.windowShardGroup = nil
+        }]))
     }
 
     // Cosmetic texture-plane overlays only; no material damage model is used.
