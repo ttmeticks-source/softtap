@@ -301,13 +301,14 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private func buildScene() {
         scene = SCNScene()
         scene.physicsWorld.gravity = SCNVector3(0, -9.8, 0)
+        scene.physicsWorld.contactDelegate = self
         sceneView.scene = scene
 
         let camera = SCNNode()
         camera.camera = SCNCamera()
-        camera.position = SCNVector3(0, 3.6, 8.5)
-        camera.eulerAngles = SCNVector3(-0.22, 0, 0)
+        cameraNode = camera
         scene.rootNode.addChildNode(camera)
+        updateCamera()
         sceneView.pointOfView = camera
 
         let ambient = SCNNode()
@@ -324,25 +325,161 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         scene.rootNode.addChildNode(key)
 
         makeRoom()
+        makeDesk()
         makeDevice()
+        buildCursorTool()
+    }
+
+    private func tag(_ node: SCNNode, kind: String) {
+        if node.userData == nil { node.userData = NSMutableDictionary() }
+        node.userData?["damageKind"] = kind
+    }
+
+    private func tagSubtree(_ node: SCNNode, kind: String) {
+        tag(node, kind: kind)
+        for child in node.childNodes { tagSubtree(child, kind: kind) }
     }
 
     private func makeRoom() {
-        let floor = SCNNode(geometry: SCNBox(width: 14, height: 0.18, length: 14, chamferRadius: 0))
-        floor.position = SCNVector3(0, -0.12, 0)
-        floor.geometry?.firstMaterial = material(roomColor(), roughness: 0.82)
+        let floorGeometry = SCNBox(width: 20, height: 0.22, length: 18, chamferRadius: 0)
+        floorGeometry.widthSegmentCount = 12
+        floorGeometry.lengthSegmentCount = 12
+        floorGeometry.firstMaterial = material(roomColor(), roughness: 0.88)
+        let floor = SCNNode(geometry: floorGeometry)
+        floor.name = "Room floor"
+        floor.position = SCNVector3(0, -0.14, 0)
         floor.physicsBody = SCNPhysicsBody.static()
+        tag(floor, kind: "floor")
         scene.rootNode.addChildNode(floor)
 
-        let back = SCNNode(geometry: SCNBox(width: 14, height: 7, length: 0.12, chamferRadius: 0))
-        back.position = SCNVector3(0, 3.35, -5)
-        back.geometry?.firstMaterial = material(wallColor(), roughness: 0.95)
-        scene.rootNode.addChildNode(back)
+        // All four walls and the ceiling are solid static colliders.
+        let wallMaterial = material(wallColor(), roughness: 0.94)
+        let bounds: [(String, SCNVector3, SCNVector3)] = [
+            ("Back wall", SCNVector3(0, 3.4, -8.9), SCNVector3(20, 7, 0.22)),
+            ("Front wall", SCNVector3(0, 3.4, 8.9), SCNVector3(20, 7, 0.22)),
+            ("Left wall", SCNVector3(-9.9, 3.4, 0), SCNVector3(0.22, 7, 18)),
+            ("Right wall", SCNVector3(9.9, 3.4, 0), SCNVector3(0.22, 7, 18)),
+            ("Ceiling", SCNVector3(0, 6.95, 0), SCNVector3(20, 0.18, 18))
+        ]
+        for (name, position, size) in bounds {
+            let geometry = SCNBox(width: CGFloat(size.x), height: CGFloat(size.y), length: CGFloat(size.z), chamferRadius: 0)
+            geometry.firstMaterial = wallMaterial
+            let wall = SCNNode(geometry: geometry)
+            wall.name = name
+            wall.position = position
+            wall.physicsBody = SCNPhysicsBody.static()
+            tag(wall, kind: "wall")
+            scene.rootNode.addChildNode(wall)
+        }
 
-        let left = SCNNode(geometry: SCNBox(width: 0.12, height: 7, length: 10, chamferRadius: 0))
-        left.position = SCNVector3(-7, 3.35, 0)
-        left.geometry?.firstMaterial = material(wallColor(), roughness: 0.95)
-        scene.rootNode.addChildNode(left)
+        // Ribbed acoustic panels and ceiling strips make the room read as an enclosed workshop.
+        for index in 0..<8 {
+            let panel = SCNNode(geometry: SCNBox(width: 1.8, height: 1.15, length: 0.07, chamferRadius: 0.035))
+            panel.name = "Acoustic wall panel"
+            panel.position = SCNVector3(-6.3 + Float(index) * 1.8, 3.65, -8.75)
+            panel.geometry?.firstMaterial = material(NSColor(calibratedWhite: 0.13 + CGFloat(index % 3) * 0.035, alpha: 1), roughness: 0.93)
+            panel.physicsBody = SCNPhysicsBody.static()
+            scene.rootNode.addChildNode(panel)
+        }
+
+        let accent = NSColor(calibratedRed: 0.10, green: 0.70, blue: 0.98, alpha: 1)
+        for y: Float in [5.85, 6.15] {
+            let strip = SCNNode(geometry: SCNBox(width: 14.5, height: 0.035, length: 0.05, chamferRadius: 0))
+            strip.name = "Room LED strip"
+            strip.position = SCNVector3(0, y, -8.72)
+            strip.geometry?.firstMaterial = material(accent, roughness: 0.28)
+            strip.geometry?.firstMaterial?.emission.contents = accent
+            strip.physicsBody = nil
+            scene.rootNode.addChildNode(strip)
+        }
+
+        let key = SCNNode()
+        key.light = SCNLight()
+        key.light?.type = .omni
+        key.light?.intensity = 1050
+        key.position = SCNVector3(-3.5, 5.7, 4)
+        scene.rootNode.addChildNode(key)
+        let fill = SCNNode()
+        fill.light = SCNLight()
+        fill.light?.type = .omni
+        fill.light?.intensity = 560
+        fill.position = SCNVector3(4, 4.8, -4)
+        scene.rootNode.addChildNode(fill)
+    }
+
+    private func makeDesk() {
+        let wood = NSColor(calibratedRed: 0.30, green: 0.20, blue: 0.13, alpha: 1)
+        let steel = NSColor(calibratedRed: 0.12, green: 0.15, blue: 0.18, alpha: 1)
+
+        let topGeometry = SCNBox(width: 7.6, height: 0.22, length: 4.5, chamferRadius: 0.065)
+        topGeometry.widthSegmentCount = 12
+        topGeometry.heightSegmentCount = 5
+        topGeometry.lengthSegmentCount = 10
+        topGeometry.firstMaterial = material(wood, roughness: 0.84)
+        let top = SCNNode(geometry: topGeometry)
+        top.name = "Workbench desk top"
+        top.position = SCNVector3(0, deskTopY, 0)
+        top.physicsBody = SCNPhysicsBody.static()
+        tag(top, kind: "desk")
+        scene.rootNode.addChildNode(top)
+
+        for x: Float in [-3.35, 3.35] {
+            for z: Float in [-1.88, 1.88] {
+                let leg = SCNNode(geometry: SCNBox(width: 0.18, height: 1.25, length: 0.18, chamferRadius: 0.025))
+                leg.name = "Workbench leg"
+                leg.position = SCNVector3(x, 0.61, z)
+                leg.geometry?.firstMaterial = material(steel, roughness: 0.46, metalness: 0.62)
+                leg.physicsBody = SCNPhysicsBody.static()
+                tag(leg, kind: "prop")
+                scene.rootNode.addChildNode(leg)
+            }
+        }
+
+        let apron = SCNNode(geometry: SCNBox(width: 6.8, height: 0.28, length: 0.14, chamferRadius: 0.025))
+        apron.name = "Desk apron"
+        apron.position = SCNVector3(0, 0.98, 1.9)
+        apron.geometry?.firstMaterial = material(steel, roughness: 0.52, metalness: 0.5)
+        apron.physicsBody = SCNPhysicsBody.static()
+        tag(apron, kind: "prop")
+        scene.rootNode.addChildNode(apron)
+
+        let drawer = SCNNode(geometry: SCNBox(width: 2.0, height: 0.34, length: 1.15, chamferRadius: 0.035))
+        drawer.name = "Desk drawer"
+        drawer.position = SCNVector3(0, 1.02, -0.45)
+        drawer.geometry?.firstMaterial = material(NSColor(calibratedRed: 0.19, green: 0.13, blue: 0.09, alpha: 1), roughness: 0.78)
+        drawer.physicsBody = SCNPhysicsBody.static()
+        tag(drawer, kind: "prop")
+        scene.rootNode.addChildNode(drawer)
+
+        let pull = SCNNode(geometry: SCNCylinder(radius: 0.035, height: 0.42))
+        pull.name = "Drawer handle"
+        pull.position = SCNVector3(0, 1.03, 0.14)
+        pull.eulerAngles.z = .pi / 2
+        pull.geometry?.firstMaterial = material(NSColor(calibratedWhite: 0.64, alpha: 1), roughness: 0.25, metalness: 0.82)
+        scene.rootNode.addChildNode(pull)
+
+        let tray = SCNNode(geometry: SCNBox(width: 1.4, height: 0.10, length: 0.85, chamferRadius: 0.025))
+        tray.name = "Metal parts tray"
+        tray.position = SCNVector3(2.75, deskTopY + 0.16, -1.42)
+        tray.geometry?.firstMaterial = material(NSColor(calibratedWhite: 0.26, alpha: 1), roughness: 0.34, metalness: 0.72)
+        tray.physicsBody = SCNPhysicsBody.static()
+        tag(tray, kind: "prop")
+        scene.rootNode.addChildNode(tray)
+
+        let organizer = SCNNode(geometry: SCNBox(width: 0.85, height: 0.28, length: 0.55, chamferRadius: 0.04))
+        organizer.name = "Parts organizer"
+        organizer.position = SCNVector3(-2.85, deskTopY + 0.22, -1.50)
+        organizer.geometry?.firstMaterial = material(NSColor(calibratedRed: 0.12, green: 0.16, blue: 0.20, alpha: 1), roughness: 0.62)
+        organizer.physicsBody = SCNPhysicsBody.static()
+        tag(organizer, kind: "prop")
+        scene.rootNode.addChildNode(organizer)
+
+        let riser = SCNNode(geometry: SCNBox(width: 6.9, height: 0.10, length: 0.35, chamferRadius: 0.025))
+        riser.name = "Workbench rear riser"
+        riser.position = SCNVector3(0, deskTopY + 0.36, -2.03)
+        riser.geometry?.firstMaterial = material(steel, roughness: 0.55, metalness: 0.42)
+        riser.physicsBody = SCNPhysicsBody.static()
+        scene.rootNode.addChildNode(riser)
     }
 
     private func roomColor() -> NSColor {
@@ -359,11 +496,11 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         roomStyle == "Neon Lab" ? NSColor(calibratedRed: 0.08, green: 0.12, blue: 0.25, alpha: 1) : roomColor().blended(withFraction: 0.25, of: .black) ?? roomColor()
     }
 
-    private func material(_ color: NSColor, roughness: CGFloat) -> SCNMaterial {
+    private func material(_ color: NSColor, roughness: CGFloat, metalness: CGFloat = 0.12) -> SCNMaterial {
         let m = SCNMaterial()
         m.diffuse.contents = color
         m.roughness.contents = roughness
-        m.metalness.contents = 0.12
+        m.metalness.contents = metalness
         return m
     }
 
