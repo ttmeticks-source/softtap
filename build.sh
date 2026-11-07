@@ -83,7 +83,7 @@ for size in sizes {
     let png = rep.representation(using:.png,properties:[:])!
     try png.write(to:URL(fileURLWithPath:"dist/Smash.iconset/icon_\(size)x\(size).png"))
 }
-SWIFTT
+SWIFT
 
 swift "dist/make_icon.swift"
 cp "dist/Smash.iconset/icon_16x16.png" "dist/Smash.iconset/icon_16x16@1x.png"
