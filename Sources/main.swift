@@ -1749,6 +1749,20 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         surfaceDamageMarks.append(mark)
     }
 
+    // Material response is intentionally separated from the hit tool's force:
+    // lower stiffness means less permanent dent depth for the same contact energy.
+    private func deformationStiffness(for part: SCNNode) -> CGFloat {
+        let identity = (part.name ?? "").lowercased()
+        if identity.contains("glass") || identity.contains("screen") || identity.contains("display") { return 0.42 }
+        if identity.contains("steel") || identity.contains("hinge") || identity.contains("frame") || identity.contains("bracket") { return 0.34 }
+        if identity.contains("aluminium") || identity.contains("aluminum") || identity.contains("metal") || identity.contains("shield") { return 0.52 }
+        if identity.contains("rubber") || identity.contains("gasket") || identity.contains("grip") { return 1.18 }
+        if identity.contains("plastic") || identity.contains("case") || identity.contains("cover") || identity.contains("shell") { return 1.0 }
+        // Unknown parts use a conservative polymer-like response rather than
+        // pretending every component is made from the same material.
+        return 0.82
+    }
+
     // Subdivide a struck box and indent the vertices around the impact point.
     // This is actual vertex displacement; the rest of the component keeps its dimensions.
     private func deformImpactMesh(_ part: SCNNode, worldPoint: SCNVector3, worldNormal: SCNVector3, intensity: CGFloat) {
@@ -1773,7 +1787,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         let sx = bounds.max.x - bounds.min.x, sy = bounds.max.y - bounds.min.y, sz = bounds.max.z - bounds.min.z
         let tangent = max(0.10, min(sx, max(sy, sz)))
         let radius = max(0.11, tangent * 0.38)
-        let depth = min(0.14, max(0.022, tangent * 0.085)) * min(1.8, max(0.55, intensity))
+        let stiffness = deformationStiffness(for: part)
+        let depth = min(0.20, max(0.018, tangent * 0.105)) * min(2.0, max(0.45, intensity)) * stiffness
         var vertices = [SCNVector3]()
         vertices.reserveCapacity(source.vectorCount)
         source.data.withUnsafeBytes { raw in
@@ -1857,9 +1872,21 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         devicePartDamage[key] = accumulated
         deformImpactMesh(part, worldPoint: point, worldNormal: normal, intensity: intensity)
         // Permanent progressive flex: the shell visibly kinks and stays bent between hits.
-        let bend = min(0.045, intensity * 0.0045)
+        let stiffness = deformationStiffness(for: part)
+        let bend = min(0.045, intensity * 0.0045) * stiffness
         part.eulerAngles.x += normal.z * bend
         part.eulerAngles.z += normal.x * bend * CGFloat.random(in: 0.7...1.3)
+        // A short elastic rebound rides on top of the persistent mesh dent.
+        // The mesh itself is never restored, so the accumulated dent survives.
+        part.removeAction(forKey: "contact-elastic-flex")
+        let flexX = normal.z * min(0.018, bend * 0.55)
+        let flexZ = normal.x * min(0.018, bend * 0.55)
+        let flex = SCNAction.sequence([
+            SCNAction.rotateBy(x: flexX, y: 0, z: flexZ, duration: 0.10),
+            SCNAction.rotateBy(x: -flexX, y: 0, z: -flexZ, duration: 0.20)
+        ])
+        flex.timingMode = .easeOut
+        part.runAction(flex, forKey: "contact-elastic-flex")
         addSurfaceDamage(at: point, normal: normal, scratch: accumulated < 1.2, on: part)
         // Structural failure is delayed: components deform and loosen over many hits first.
         if accumulated >= 5.2, part.parent === deviceRoot, let geometry = part.geometry {
