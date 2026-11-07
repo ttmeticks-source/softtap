@@ -174,4 +174,40 @@ try pair("steam_hiss", duration: 0.90) { t, i, s in
     return (broadband + pressure) * exp(-t * 2.2) * min(1, t * 30)
 }
 
+
+try pair("aluminum_ting", duration: 1.02) { t, i, s in
+    let attack = noise(i, s) * 0.18 * exp(-t * 92)
+    let ring = sin(2 * .pi * 935 * t) * 0.20 * exp(-t * 4.2)
+        + sin(2 * .pi * 1478 * t) * 0.13 * exp(-t * 5.8)
+        + sin(2 * .pi * 2210 * t) * 0.07 * exp(-t * 8.0)
+    return attack + ring
+}
+try pair("steel_ring", duration: 1.25) { t, i, s in
+    let attack = noise(i, s) * 0.16 * exp(-t * 86)
+    let ring = sin(2 * .pi * 615 * t) * 0.18 * exp(-t * 1.8)
+        + sin(2 * .pi * 1037 * t) * 0.15 * exp(-t * 2.6)
+        + sin(2 * .pi * 1732 * t) * 0.11 * exp(-t * 3.7)
+        + sin(2 * .pi * 2480 * t) * 0.05 * exp(-t * 5.5)
+    return attack + ring
+}
+try pair("ceramic_clink", duration: 0.72) { t, i, s in
+    let tick = noise(i, s) * 0.28 * exp(-t * 110)
+    let modes = sin(2 * .pi * 1680 * t) * 0.18 * exp(-t * 8.5)
+        + sin(2 * .pi * 2470 * t) * 0.12 * exp(-t * 11)
+        + sin(2 * .pi * 3310 * t) * 0.06 * exp(-t * 14)
+    return tick + modes
+}
+try pair("rubber_thud", duration: 0.58) { t, i, s in
+    let attack = noise(i, s) * 0.12 * exp(-t * 42)
+    let low = sin(2 * .pi * 62 * t) * 0.32 * exp(-t * 12)
+        + sin(2 * .pi * 104 * t) * 0.12 * exp(-t * 17)
+    return attack + low
+}
+try pair("fabric_rustle", duration: 0.78) { t, i, s in
+    let envelope = exp(-t * 2.6) * (0.5 + 0.5 * sin(t * 28))
+    let softNoise = (noise(i, s) - noise(i - 48, s)) * 0.10
+    let low = sin(2 * .pi * 88 * t) * 0.035
+    return (softNoise + low) * envelope
+}
+
 print("Generated twenty layered material and tool effects, with alternate randomized takes.")
