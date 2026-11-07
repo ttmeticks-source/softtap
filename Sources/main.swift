@@ -119,7 +119,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         heading.translatesAutoresizingMaskIntoConstraints = false
         sidebar.addSubview(heading)
 
-        let subtitle = NSTextField(labelWithString: "PLAYABLE DEMO  •  PHYSICS SANDBOX")
+        let subtitle = NSTextField(labelWithString: "LIVE PHYSICS  •  MATERIAL DAMAGE LAB")
         subtitle.font = .systemFont(ofSize: 9, weight: .bold)
         subtitle.textColor = NSColor(calibratedWhite: 0.58, alpha: 1)
         subtitle.translatesAutoresizingMaskIntoConstraints = false
@@ -298,6 +298,17 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         b.layer?.borderWidth = 1
         b.layer?.borderColor = NSColor(calibratedRed: 0.23, green: 0.48, blue: 0.59, alpha: 1).cgColor
         b.contentTintColor = NSColor(calibratedRed: 0.91, green: 0.97, blue: 1, alpha: 1)
+        let symbol: String
+        switch title {
+        case "START 3D DEMO": symbol = "play.fill"
+        case "STRIKE OBJECT": symbol = "hammer.fill"
+        case "DROP FROM HEIGHT": symbol = "arrow.down.to.line"
+        case "RESET SCENE": symbol = "arrow.counterclockwise"
+        case "TOGGLE DEVICE INTERNALS": symbol = "cpu"
+        default: symbol = "circle.fill"
+        }
+        b.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
+        b.imagePosition = .imageLeading
         b.font = .systemFont(ofSize: 11, weight: .semibold)
         b.controlSize = .large
         b.translatesAutoresizingMaskIntoConstraints = false
@@ -548,8 +559,6 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         windowCrackDecals.forEach { $0.removeFromParentNode() }
         windowCrackDecals.removeAll()
         shardGroup.isHidden = false
-        play(shatterSound)
-        play(debrisScatterSound)
         playSpatial("glass_shatter", at: impactPoint, volume: 1.0)
         playSpatial("debris_scatter", at: impactPoint, volume: 0.82)
 
@@ -597,9 +606,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         plane.firstMaterial = material
         let decal = SCNNode(geometry: plane)
         decal.name = "Window crack overlay"
-        decal.position = SCNVector3(localPoint.x + localNormal.x * 0.012,
-                                    localPoint.y + localNormal.y * 0.012,
-                                    localPoint.z + localNormal.z * 0.012)
+        decal.position = SCNVector3(localPoint.x + localNormal.x * 0.003,
+                                    localPoint.y + localNormal.y * 0.003,
+                                    localPoint.z + localNormal.z * 0.003)
         decal.look(at: SCNVector3(localPoint.x + localNormal.x, localPoint.y + localNormal.y, localPoint.z + localNormal.z),
                   up: SCNVector3(0, 1, 0), localFront: SCNVector3(0, 0, 1))
         decal.eulerAngles.z += CGFloat.random(in: 0...(2 * .pi))
@@ -1091,7 +1100,11 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             for row in 0..<4 { for col in 0..<12 {
                 root.addChildNode(box(0.16, 0.018, 0.12, metal, SCNVector3(-1.25 + Float(col) * 0.23, 0.245, -0.62 + Float(row) * 0.18), 0.025))
             }}
+            addShellBox("MacBook display bezel", SCNVector3(2.72, 1.70, 0.018), SCNVector3(0, 1.13, -0.846), dark, 0.035)
+            addShellSphere("MacBook camera glass", radius: 0.022, position: SCNVector3(0, 1.98, -0.835), surface: metal)
             addShellBox("MacBook trackpad", SCNVector3(0.92, 0.018, 0.58), SCNVector3(0, 0.245, 0.47), dark, 0.06)
+            addShellBox("MacBook palm rest seam", SCNVector3(2.62, 0.008, 0.012), SCNVector3(0, 0.238, 0.04), metal, 0.003)
+            addShellBox("MacBook power key", SCNVector3(0.12, 0.018, 0.12), SCNVector3(1.22, 0.245, -0.76), dark, 0.025)
             addShellCylinder("MacBook hinge", radius: 0.052, height: 2.15, position: SCNVector3(0, 0.245, -0.88), surface: metal)
             if let hinge = root.childNodes.last { hinge.eulerAngles.z = .pi / 2 }
             addShellSphere("Display webcam", radius: 0.032, position: SCNVector3(0, 2.01, -0.79), surface: dark)
@@ -1166,6 +1179,11 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                 addShellBox("Tablet speaker perforation", SCNVector3(0.025, 0.012, 0.035),
                             SCNVector3(-0.70 + CGFloat(i) * 0.20, 0.30, 1.46), dark, 0.006)
             }
+            addShellBox("Tablet front camera bezel", SCNVector3(0.13, 0.018, 0.045), SCNVector3(0, 0.31, -1.48), dark, 0.02)
+            addShellSphere("Tablet front camera lens", radius: 0.025, position: SCNVector3(0.07, 0.32, -1.48), surface: metal)
+            for side: CGFloat in [-1, 1] {
+                addShellBox("Tablet volume rocker", SCNVector3(0.035, 0.055, 0.32), SCNVector3(side * 1.12, 0.24, -0.75), metal, 0.012)
+            }
         default:
             root.addChildNode(box(1.25, 0.16, 2.45, metal, SCNVector3(0, 0.18, 0), 0.14))
             root.addChildNode(box(1.12, 0.035, 2.28, glass, SCNVector3(0, 0.28, 0), 0.12))
@@ -1176,6 +1194,18 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             addShellSphere("Phone rear camera lens one", radius: 0.060, position: SCNVector3(0.40, 0.105, -0.96), surface: dark)
             addShellSphere("Phone rear camera lens two", radius: 0.052, position: SCNVector3(0.25, 0.105, -0.82), surface: dark)
             addShellSphere("Phone flash", radius: 0.025, position: SCNVector3(0.51, 0.105, -0.80), surface: metal)
+            let cameraRingA = SCNNode(geometry: SCNTorus(ringRadius: 0.070, pipeRadius: 0.010))
+            cameraRingA.name = "Phone camera lens metal ring"
+            cameraRingA.geometry?.firstMaterial = metal
+            cameraRingA.position = SCNVector3(0.40, 0.105, -0.96)
+            addShell(cameraRingA)
+            let cameraRingB = SCNNode(geometry: SCNTorus(ringRadius: 0.061, pipeRadius: 0.008))
+            cameraRingB.name = "Phone second camera lens ring"
+            cameraRingB.geometry?.firstMaterial = metal
+            cameraRingB.position = SCNVector3(0.25, 0.105, -0.82)
+            addShell(cameraRingB)
+            addShellBox("Phone earpiece grille", SCNVector3(0.22, 0.012, 0.025), SCNVector3(0, 0.305, -1.12), dark, 0.01)
+            addShellSphere("Phone front camera", radius: 0.025, position: SCNVector3(0.22, 0.305, -1.12), surface: dark)
             addShellBox("Phone charging port", SCNVector3(0.26, 0.035, 0.025), SCNVector3(0, 0.18, 1.23), dark, 0.01)
             for side: CGFloat in [-1, 1] {
                 addShellBox("Phone side button", SCNVector3(0.035, 0.07, 0.22), SCNVector3(side * 0.635, 0.20, -0.30), metal, 0.012)
@@ -1446,7 +1476,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         plane.firstMaterial = mat
         let mark = SCNNode(geometry: plane)
         mark.name = "Surface damage mark"
-        mark.position = SCNVector3(localPoint.x + localNormal.x * 0.009, localPoint.y + localNormal.y * 0.009, localPoint.z + localNormal.z * 0.009)
+        mark.position = SCNVector3(localPoint.x + localNormal.x * 0.0025, localPoint.y + localNormal.y * 0.0025, localPoint.z + localNormal.z * 0.0025)
         mark.look(at: SCNVector3(localPoint.x + localNormal.x, localPoint.y + localNormal.y, localPoint.z + localNormal.z),
                   up: SCNVector3(0, 1, 0), localFront: SCNVector3(0, 0, 1))
         mark.eulerAngles.z += CGFloat.random(in: 0...(2 * .pi))
@@ -1543,7 +1573,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             detachedDeviceParts.append(part)
             deviceShellParts.removeAll { $0 === part }
             breakableComponents.removeAll { $0 === part }
-            play(deviceRattleSound)
+            playSpatial("device_rattle", at: world, volume: 0.72)
             statusLabel.stringValue = "A damaged casing component has come loose."
         }
     }
@@ -1598,7 +1628,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     @objc private func damageChanged(_ sender: NSSlider) { damageLevel = Float(sender.floatValue) }
 
     private func playSpatial(_ name: String, at position: SCNVector3, volume: Float = 1.0) {
-        guard let url = Bundle.main.url(forResource: name, withExtension: "wav"),
+        let alternate = name + "_alt"
+        let chosenName = Bool.random() && Bundle.main.url(forResource: alternate, withExtension: "wav") != nil ? alternate : name
+        guard let url = Bundle.main.url(forResource: chosenName, withExtension: "wav"),
               let source = SCNAudioSource(url: url) else { return }
         source.isPositional = true
         source.shouldStream = false
@@ -1794,13 +1826,11 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             let touchesFrame = hit.node.name?.hasPrefix("Window frame") == true
             if !windowHasBroken && (touchesGlass || touchesFrame) {
                 windowHitCount += 1
-                if let glass = windowIntactGlass {
+                if touchesGlass, let glass = windowIntactGlass {
                     addWindowCrack(at: hit.worldCoordinates, normal: hit.worldNormal, stage: windowHitCount, on: glass)
                 }
-                play(glassTapSound)
                 playSpatial("glass_tap", at: hit.worldCoordinates, volume: 0.9)
                 if windowHitCount == 1 {
-                    play(glassCrackleSound)
                     playSpatial("glass_crackle", at: hit.worldCoordinates, volume: 0.82)
                 }
                 if windowHitCount >= 2 {
@@ -1810,10 +1840,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                 }
             } else if let device = deviceRoot, isInside(hit.node, root: device) {
                 let strikeImpulse = CGFloat(damageLevel) * 5
-                if strikeImpulse > 4.2 { play(scratchSound) } else { play(deviceThudSound) }
                 playSpatial(strikeImpulse > 4.2 ? "surface_scratch" : "device_thud", at: hit.worldCoordinates, volume: 0.92)
                 damageDevicePart(hit.node, at: hit.worldCoordinates, normal: hit.worldNormal, intensity: CGFloat(damageLevel))
-                if damageLevel > 0.45 { play(deviceRattleSound) }
+                if damageLevel > 0.45 { playSpatial("device_rattle", at: hit.worldCoordinates, volume: 0.58) }
                 let normal = hit.worldNormal
                 let impulse = CGFloat(0.16 + damageLevel * 0.34)
                 device.physicsBody?.applyForce(SCNVector3(-normal.x * impulse, -normal.y * impulse, -normal.z * impulse), asImpulse: true)
