@@ -3,6 +3,14 @@ import SceneKit
 import QuartzCore
 
 final class SmashSceneView: SCNView {
+    private var mouseTracking: NSTrackingArea?
+    override func updateTrackingAreas() {
+        if let mouseTracking { removeTrackingArea(mouseTracking) }
+        let area = NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseDragged, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil)
+        addTrackingArea(area)
+        mouseTracking = area
+        super.updateTrackingAreas()
+    }
     var onInspect: ((NSPoint) -> Void)?
     var onAim: ((NSPoint) -> Void)?
     var onSwing: ((NSPoint) -> Void)?
@@ -171,6 +179,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         devicePopup.target = self; devicePopup.action = #selector(deviceChanged(_:))
         toolPopup.target = self; toolPopup.action = #selector(toolChanged(_:))
         roomPopup.target = self; roomPopup.action = #selector(roomChanged(_:))
+        window.acceptsMouseMovedEvents = true
         window.makeKeyAndOrderFront(nil)
     }
 
@@ -331,6 +340,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             format: "Scene contact: %@ ↔ %@  ·  impulse %.1f",
             first, second, impulse
         )
+        play(impactSound)
     }
 
     private func addStaticBox(
