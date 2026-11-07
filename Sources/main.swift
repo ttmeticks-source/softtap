@@ -26,6 +26,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private var roomPopup: NSPopUpButton!
     private var damageSlider: NSSlider!
     private let deskTopY: CGFloat = 1.26
+    private let dynamicCategoryMask = 1
+    private let staticCategoryMask = 2
+    private let cameraBounds = (x: CGFloat(9.20), y: CGFloat(6.35), z: CGFloat(8.15))
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.activate(ignoringOtherApps: true)
@@ -259,8 +262,38 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private func configurePhysicsWorld() {
         scene.physicsWorld.gravity = SCNVector3(0, -9.8, 0)
         scene.physicsWorld.speed = 1.0
+        // A fixed 120 Hz step reduces tunnelling and jitter for the existing SceneKit bodies.
         scene.physicsWorld.timeStep = 1.0 / 120.0
         scene.physicsWorld.contactDelegate = self
+    }
+
+    // SceneKit exposes per-body material response and resting controls, but not public
+    // solver-iteration or contact-depth tuning. Keep collision response consistent here.
+    private func configureDynamicBody(
+        _ body: SCNPhysicsBody,
+        mass: CGFloat,
+        friction: CGFloat,
+        restitution: CGFloat,
+        linearDamping: CGFloat,
+        angularDamping: CGFloat
+    ) {
+        body.mass = mass
+        body.friction = friction
+        body.restitution = min(0.25, max(0.02, restitution))
+        body.linearDamping = linearDamping
+        body.angularDamping = angularDamping
+        body.allowsResting = true
+        body.categoryBitMask = dynamicCategoryMask
+        body.collisionBitMask = dynamicCategoryMask | staticCategoryMask
+        body.contactTestBitMask = dynamicCategoryMask | staticCategoryMask
+    }
+
+    private func configureStaticBody(_ body: SCNPhysicsBody, friction: CGFloat, restitution: CGFloat) {
+        body.friction = friction
+        body.restitution = restitution
+        body.categoryBitMask = staticCategoryMask
+        body.collisionBitMask = dynamicCategoryMask | staticCategoryMask
+        body.contactTestBitMask = dynamicCategoryMask
     }
 
     func physicsWorld(_ world: SCNPhysicsWorld, didBegin contact: SCNPhysicsContact) {
@@ -294,10 +327,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
         let shape = SCNPhysicsShape(geometry: geometry, options: nil)
         node.physicsBody = SCNPhysicsBody(type: .static, shape: shape)
-        node.physicsBody?.friction = 0.82
-        node.physicsBody?.restitution = 0.08
-        node.physicsBody?.categoryBitMask = 2
-        node.physicsBody?.collisionBitMask = 0x7fffffff
+        if let body = node.physicsBody {
+            configureStaticBody(body, friction: 0.86, restitution: 0.04)
+        }
 
         scene.rootNode.addChildNode(node)
         return node
@@ -410,6 +442,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                 type: .static,
                 shape: SCNPhysicsShape(geometry: pullGeometry, options: nil)
             )
+            if let body = pull.physicsBody {
+                configureStaticBody(body, friction: 0.78, restitution: 0.03)
+            }
             scene.rootNode.addChildNode(pull)
         }
 
@@ -429,9 +464,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
         let current = camera.position
         let clamped = SCNVector3(
-            min(9.20, max(-9.20, current.x)),
-            min(6.35, max(0.65, current.y)),
-            min(8.15, max(-8.15, current.z))
+            min(Float(cameraBounds.x), max(Float(-cameraBounds.x), current.x)),
+            min(Float(cameraBounds.y), max(0.65, current.y)),
+            min(Float(cameraBounds.z), max(Float(-cameraBounds.z), current.z))
         )
 
         if current.x != clamped.x || current.y != clamped.y || current.z != clamped.z {
@@ -522,14 +557,23 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         root.position = SCNVector3(0, deskSurfaceY + collisionSize.y / 2 + 0.015, 0)
         let collisionGeometry = SCNBox(width: CGFloat(collisionSize.x), height: CGFloat(collisionSize.y), length: CGFloat(collisionSize.z), chamferRadius: 0.05)
         root.physicsBody = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: collisionGeometry, options: nil))
-        root.physicsBody?.mass = selectedDevice == "Desktop PC" ? 9 : 2.2
-        root.physicsBody?.friction = 0.78
-        root.physicsBody?.restitution = 0.12
-        root.physicsBody?.angularDamping = 0.52
-        root.physicsBody?.linearDamping = 0.12
-        root.physicsBody?.categoryBitMask = 1
-        root.physicsBody?.collisionBitMask = 0x7fffffff
-        root.physicsBody?.contactTestBitMask = 0x7fffffff
+        if let body = root.physicsBody {
+            let profile: (mass: CGFloat, friction: CGFloat, restitution: CGFloat, linear: CGFloat, angular: CGFloat)
+            switch selectedDevice {
+            case "Desktop PC": profile = (9.0, 0.88, 0.035, 0.16, 0.68)
+            case "MacBook": profile = (3.4, 0.82, 0.045, 0.14, 0.62)
+            case "iPad": profile = (1.1, 0.76, 0.055, 0.10, 0.58)
+            default: profile = (0.42, 0.72, 0.065, 0.08, 0.54)
+            }
+            configureDynamicBody(
+                body,
+                mass: profile.mass,
+                friction: profile.friction,
+                restitution: profile.restitution,
+                linearDamping: profile.linear,
+                angularDamping: profile.angular
+            )
+        }
         scene.rootNode.addChildNode(root)
         deviceRoot = root
     }
@@ -562,7 +606,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             ball.geometry?.firstMaterial = material(NSColor(calibratedWhite: 0.22, alpha: 1), roughness: 0.22)
             ball.position = SCNVector3(-2.8, 2.5, 1.4)
             ball.physicsBody = SCNPhysicsBody(type: .dynamic, shape: nil)
-            ball.physicsBody?.mass = 12
+            if let ballBody = ball.physicsBody {
+                configureDynamicBody(ballBody, mass: 12, friction: 0.68, restitution: 0.025, linearDamping: 0.08, angularDamping: 0.24)
+            }
             scene.rootNode.addChildNode(ball)
             ball.physicsBody?.applyForce(SCNVector3(28, -7, -12), asImpulse: true)
         case "Drop Test":
