@@ -461,12 +461,12 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         guard let camera = renderer.pointOfView else { return }
 
         let current = camera.position
-        let minX = Float(-cameraBounds.x)
-        let maxX = Float(cameraBounds.x)
-        let minY: Float = 0.65
-        let maxY = Float(cameraBounds.y)
-        let minZ = Float(-cameraBounds.z)
-        let maxZ = Float(cameraBounds.z)
+        let minX: CGFloat = -cameraBounds.x
+        let maxX: CGFloat = cameraBounds.x
+        let minY: CGFloat = 0.65
+        let maxY: CGFloat = cameraBounds.y
+        let minZ: CGFloat = -cameraBounds.z
+        let maxZ: CGFloat = cameraBounds.z
         let x = Swift.min(maxX, Swift.max(minX, current.x))
         let y = Swift.min(maxY, Swift.max(minY, current.y))
         let z = Swift.min(maxZ, Swift.max(minZ, current.z))
