@@ -54,6 +54,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private var windowHitCount = 0
     private var internalParts: [SCNNode] = []
     private var deviceShellParts: [SCNNode] = []
+    private var breakableComponents: [SCNNode] = []
+    private var detachedDeviceParts: [SCNNode] = []
     private var showingInternals = false
     private var damageLevel: Float = 0.72
     private var roomStyle = "Studio"
@@ -995,6 +997,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
     private func makeDevice() {
         deviceRoot?.removeFromParentNode()
+        detachedDeviceParts.forEach { $0.removeFromParentNode() }
+        detachedDeviceParts.removeAll()
+        breakableComponents.removeAll()
         internalParts.removeAll()
         deviceShellParts.removeAll()
         let root = SCNNode()
@@ -1294,8 +1299,71 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                 angularDamping: profile.angular
             )
         }
+        let excludedPartWords = ["perforation", "grille", "port", "button", "led", "lens", "speaker", "fan hub", "case foot", "webcam"]
+        breakableComponents = root.childNodes.filter { node in
+            guard node.geometry != nil else { return false }
+            let name = (node.name ?? "").lowercased()
+            if excludedPartWords.contains(where: { name.contains($0) }) { return false }
+            let bounds = node.boundingBox
+            let dx = abs(bounds.max.x - bounds.min.x)
+            let dy = abs(bounds.max.y - bounds.min.y)
+            let dz = abs(bounds.max.z - bounds.min.z)
+            return dx * dy * dz > 0.008
+        }
         scene.rootNode.addChildNode(root)
         deviceRoot = root
+    }
+
+    private func detachNearestDevicePart(at impactPoint: SCNVector3) {
+        let candidates = showingInternals ? internalParts : breakableComponents
+        guard let part = candidates.min(by: { a, b in
+            let pa = a.presentation.worldPosition
+            let pb = b.presentation.worldPosition
+            let da = (pa.x - impactPoint.x) * (pa.x - impactPoint.x) +
+                     (pa.y - impactPoint.y) * (pa.y - impactPoint.y) +
+                     (pa.z - impactPoint.z) * (pa.z - impactPoint.z)
+            let db = (pb.x - impactPoint.x) * (pb.x - impactPoint.x) +
+                     (pb.y - impactPoint.y) * (pb.y - impactPoint.y) +
+                     (pb.z - impactPoint.z) * (pb.z - impactPoint.z)
+            return da < db
+        }), let geometry = part.geometry else { return }
+        let worldPosition = part.presentation.worldPosition
+        let worldRotation = part.presentation.eulerAngles
+        part.removeFromParentNode()
+        scene.rootNode.addChildNode(part)
+        part.position = worldPosition
+        part.eulerAngles = worldRotation
+        part.isHidden = false
+        let bounds = geometry.boundingBox
+        let dx = abs(bounds.max.x - bounds.min.x)
+        let dy = abs(bounds.max.y - bounds.min.y)
+        let dz = abs(bounds.max.z - bounds.min.z)
+        let partMass = min(1.8, max(0.06, dx * dy * dz * 2.4))
+        let body = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: geometry, options: nil))
+        configureDynamicBody(body, mass: partMass, friction: 0.58, restitution: 0.075, angularDamping: 0.32)
+        part.physicsBody = body
+        var direction = SCNVector3(worldPosition.x - impactPoint.x,
+                                   max(0.25, worldPosition.y - impactPoint.y + 0.35),
+                                   worldPosition.z - impactPoint.z)
+        let length = max(0.001, sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z))
+        direction = SCNVector3(direction.x / length, direction.y / length, direction.z / length)
+        let impulse = CGFloat(1.2 + damageLevel * 3.8)
+        body.applyForce(SCNVector3(direction.x * impulse, direction.y * impulse, direction.z * impulse), asImpulse: true)
+        body.applyTorque(SCNVector4(Float.random(in: -1...1), Float.random(in: -1...1),
+                                    Float.random(in: -1...1), Float.random(in: 0.5...1.8)), asImpulse: true)
+        if showingInternals {
+            internalParts.removeAll { $0 === part }
+        } else {
+            breakableComponents.removeAll { $0 === part }
+        }
+        deviceShellParts.removeAll { $0 === part }
+        detachedDeviceParts.append(part)
+        play(deviceRattleSound)
+        part.runAction(.sequence([.wait(duration: 11.5), .fadeOut(duration: 0.5), .removeFromParentNode()]))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 12.2) { [weak self, weak part] in
+            guard let self, let part else { return }
+            self.detachedDeviceParts.removeAll { $0 === part }
+        }
     }
 
     @objc private func toggleDeviceInternals() {
@@ -1409,6 +1477,19 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         case "Flashlight":
             head = SCNNode(geometry: SCNCylinder(radius: 0.13, height: 0.30))
             head.geometry?.firstMaterial = metal
+        case "Impact Driver":
+            head = SCNNode(geometry: SCNBox(width: 0.24, height: 0.34, length: 0.18, chamferRadius: 0.045))
+            head.geometry?.firstMaterial = material(NSColor(calibratedRed: 0.16, green: 0.42, blue: 0.52, alpha: 1), roughness: 0.38)
+            let chuck = SCNNode(geometry: SCNCylinder(radius: 0.045, height: 0.22))
+            chuck.geometry?.firstMaterial = metal
+            chuck.position = SCNVector3(0, 0.12, -0.18)
+            head.addChildNode(chuck)
+        case "Plastic Spudger":
+            head = SCNNode(geometry: SCNBox(width: 0.075, height: 0.40, length: 0.045, chamferRadius: 0.025))
+            head.geometry?.firstMaterial = material(NSColor(calibratedRed: 0.18, green: 0.62, blue: 0.82, alpha: 1), roughness: 0.7)
+        case "Suction Cup":
+            head = SCNNode(geometry: SCNTorus(ringRadius: 0.12, pipeRadius: 0.035))
+            head.geometry?.firstMaterial = material(NSColor(calibratedRed: 0.18, green: 0.25, blue: 0.28, alpha: 1), roughness: 0.28)
         default:
             head = SCNNode(geometry: SCNBox(width: 0.42, height: 0.18, length: 0.18, chamferRadius: 0.04))
             head.geometry?.firstMaterial = metal
@@ -1490,6 +1571,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                 addImpactDecal(at: hit.worldCoordinates, normal: hit.worldNormal, impulse: CGFloat(damageLevel) * 5, surfaceName: hit.node.name ?? "Device")
                 let strikeImpulse = CGFloat(damageLevel) * 5
                 if strikeImpulse > 4.2 { play(scratchSound) } else { play(deviceThudSound) }
+                if damageLevel > 0.28 { detachNearestDevicePart(at: hit.worldCoordinates) }
                 if damageLevel > 0.45 { play(deviceRattleSound) }
                 device.physicsBody?.applyForce(SCNVector3(0, power * 0.07, power), asImpulse: true)
             }
