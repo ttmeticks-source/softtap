@@ -769,7 +769,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         practical.light = SCNLight()
         practical.light?.type = .area
         practical.light?.intensity = 520
-        practical.light?.areaSize = CGSize(width: 3.4, height: 1.1)
+        practical.light?.castsShadow = false
         practical.position = SCNVector3(0, 6.75, 0)
         scene.rootNode.addChildNode(practical)
     }
