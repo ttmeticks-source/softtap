@@ -210,4 +210,52 @@ try pair("fabric_rustle", duration: 0.78) { t, i, s in
     return (softNoise + low) * envelope
 }
 
-print("Generated twenty layered material and tool effects, with alternate randomized takes.")
+try pair("hammer_impact", duration: 0.68) { t, i, s in
+    let hit = noise(i, s) * 0.36 * exp(-t * 94)
+    let steel = sin(2 * .pi * 880 * t) * 0.10 * exp(-t * 8)
+    let head = sin(2 * .pi * 142 * t) * 0.26 * exp(-t * 8.5)
+        + sin(2 * .pi * 286 * t) * 0.12 * exp(-t * 13)
+    return hit + steel + head
+}
+try pair("mallet_impact", duration: 0.58) { t, i, s in
+    let soft = noise(i, s) * 0.17 * exp(-t * 46)
+    let body = sin(2 * .pi * 78 * t) * 0.34 * exp(-t * 10)
+        + sin(2 * .pi * 132 * t) * 0.12 * exp(-t * 14)
+    return soft + body
+}
+try pair("wrench_impact", duration: 0.76) { t, i, s in
+    let tick = noise(i, s) * 0.30 * exp(-t * 115)
+    let ring = sin(2 * .pi * 720 * t) * 0.17 * exp(-t * 4)
+        + sin(2 * .pi * 1180 * t) * 0.11 * exp(-t * 5.5)
+    return tick + ring
+}
+try pair("screwdriver_tap", duration: 0.34) { t, i, s in
+    let click = noise(i, s) * 0.36 * exp(-t * 155)
+    let shaft = sin(2 * .pi * 1680 * t) * 0.10 * exp(-t * 24)
+    return click + shaft
+}
+try pair("impact_driver_impact", duration: 0.82) { t, i, s in
+    let burst = noise(i, s) * 0.28 * exp(-t * 66)
+    let motor = sin(2 * .pi * (138 + 22 * sin(t * 70)) * t) * 0.19 * exp(-t * 8)
+    let ratchet = (pulse(t, 0.07, 0.012) + pulse(t, 0.13, 0.014) + pulse(t, 0.20, 0.018)) * 0.22
+    return burst + motor + ratchet * noise(i / 4, s + 7)
+}
+try pair("spudger_snap", duration: 0.30) { t, i, s in
+    let snap = noise(i, s) * 0.34 * exp(-t * 175)
+    let flex = sin(2 * .pi * 1120 * t) * 0.08 * exp(-t * 31)
+    return snap + flex
+}
+try pair("suction_pop", duration: 0.48) { t, i, s in
+    let pop = noise(i, s) * 0.28 * pulse(t, 0.08, 0.025)
+    let release = sin(2 * .pi * (170 + 80 * exp(-t * 8)) * t) * 0.20 * exp(-t * 9)
+    let air = (noise(i, s) - noise(i - 24, s)) * 0.08 * exp(-t * 6)
+    return pop + release + air
+}
+try pair("tool_swing", duration: 0.32) { t, i, s in
+    let whoosh = noise(i, s) - noise(i - 70, s)
+    let envelope = pow(max(0, 1 - t / 0.32), 1.4)
+    let low = sin(2 * .pi * (110 - 34 * t) * t) * 0.08
+    return (whoosh * 0.12 + low) * envelope
+}
+
+print("Generated layered material, glass, and tool effects with alternate takes.")
