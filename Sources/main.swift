@@ -265,6 +265,419 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         ]))
     }
 
+    private func buildCursorTool() {
+        cursorToolNode?.removeFromParentNode()
+        let tool = SCNNode()
+        tool.name = "Cursor Tool — \(selectedTool)"
+        let steel = material(NSColor(calibratedRed: 0.62, green: 0.68, blue: 0.74, alpha: 1), roughness: 0.24, metalness: 0.82)
+        let grip = material(NSColor(calibratedRed: 0.13, green: 0.15, blue: 0.18, alpha: 1), roughness: 0.84)
+
+        let handle = SCNNode(geometry: SCNCylinder(radius: 0.05, height: 0.62))
+        handle.name = "Cursor Tool handle"
+        handle.geometry?.firstMaterial = grip
+        handle.position = SCNVector3(0, 0.23, 0)
+        tool.addChildNode(handle)
+
+        switch selectedTool {
+        case "Wrench":
+            let head = SCNNode(geometry: SCNTorus(ringRadius: 0.15, pipeRadius: 0.045))
+            head.name = "Cursor Tool wrench head"
+            head.geometry?.firstMaterial = steel
+            head.position = SCNVector3(0, 0.55, 0)
+            tool.addChildNode(head)
+        case "Impact Driver":
+            let body = SCNNode(geometry: SCNCylinder(radius: 0.105, height: 0.34))
+            body.geometry?.firstMaterial = grip
+            body.position = SCNVector3(0, 0.56, 0)
+            tool.addChildNode(body)
+            let bit = SCNNode(geometry: SCNCylinder(radius: 0.025, height: 0.22))
+            bit.geometry?.firstMaterial = steel
+            bit.position = SCNVector3(0, 0.83, 0)
+            tool.addChildNode(bit)
+        case "Energy Pulse":
+            let orb = SCNNode(geometry: SCNSphere(radius: 0.18))
+            orb.geometry?.firstMaterial = material(NSColor(calibratedRed: 0.12, green: 0.72, blue: 0.98, alpha: 1), roughness: 0.12)
+            orb.geometry?.firstMaterial?.emission.contents = NSColor(calibratedRed: 0.08, green: 0.32, blue: 0.9, alpha: 1)
+            tool.addChildNode(orb)
+        case "Rubber Mallet", "Soft Tap":
+            let head = SCNNode(geometry: SCNBox(width: 0.48, height: 0.18, length: 0.18, chamferRadius: 0.06))
+            head.geometry?.firstMaterial = selectedTool == "Soft Tap" ? grip : material(NSColor(calibratedRed: 0.18, green: 0.21, blue: 0.24, alpha: 1), roughness: 0.92)
+            head.position = SCNVector3(0, 0.55, 0)
+            tool.addChildNode(head)
+        default:
+            let head = SCNNode(geometry: SCNBox(width: selectedTool == "Heavy Hammer" ? 0.62 : 0.45,
+                                                height: 0.20, length: 0.18, chamferRadius: 0.04))
+            head.geometry?.firstMaterial = steel
+            head.position = SCNVector3(0, 0.55, 0)
+            tool.addChildNode(head)
+        }
+
+        tool.scale = SCNVector3(0.72, 0.72, 0.72)
+        tool.position = SCNVector3(0, deskTopY + 1.2, 0)
+        scene.rootNode.addChildNode(tool)
+        cursorToolNode = tool
+    }
+
+    private func damageableOwner(for node: SCNNode) -> SCNNode? {
+        var current: SCNNode? = node
+        while let candidate = current {
+            if candidate.userData?["damageKind"] as? String != nil { return candidate }
+            current = candidate.parent
+        }
+        return nil
+    }
+
+    private func moveCursorTool(to point: NSPoint) {
+        guard let cursorToolNode else { return }
+        let hits = sceneView.hitTest(point, options: nil)
+        if let hit = hits.first(where: { !($0.node.name ?? "").hasPrefix("Cursor Tool") }) {
+            let normal = hit.worldNormal
+            cursorToolNode.position = SCNVector3(
+                hit.worldCoordinates.x + normal.x * 0.30,
+                hit.worldCoordinates.y + normal.y * 0.30,
+                hit.worldCoordinates.z + normal.z * 0.30
+            )
+        } else {
+            let near = sceneView.unprojectPoint(SCNVector3(Float(point.x), Float(point.y), 0))
+            let far = sceneView.unprojectPoint(SCNVector3(Float(point.x), Float(point.y), 1))
+            let direction = SCNVector3(far.x - near.x, far.y - near.y, far.z - near.z)
+            if abs(direction.y) > 0.0001 {
+                let planeY = deskTopY + 0.85
+                let t = (planeY - near.y) / direction.y
+                if t >= 0 {
+                    cursorToolNode.position = SCNVector3(
+                        min(8.0, max(-8.0, near.x + direction.x * t)),
+                        planeY,
+                        min(7.6, max(-7.6, near.z + direction.z * t))
+                    )
+                }
+            }
+        }
+    }
+
+    private func animateToolImpact(intensity: Float) {
+        guard let cursorToolNode else { return }
+        cursorToolNode.removeAllActions()
+        let wobble = min(0.42, 0.10 + Double(intensity) * 0.14)
+        cursorToolNode.runAction(.sequence([
+            .group([
+                .moveBy(x: 0, y: -CGFloat(0.12 + intensity * 0.08), z: 0, duration: 0.045),
+                .rotateBy(x: 0, y: 0, z: wobble, duration: 0.055)
+            ]),
+            .group([
+                .moveBy(x: 0, y: CGFloat(0.12 + intensity * 0.08), z: 0, duration: 0.09),
+                .rotateBy(x: 0, y: 0, z: -wobble * 0.78, duration: 0.10)
+            ])
+        ]))
+    }
+
+    private func applySelectedTool(at point: NSPoint, heldFor: TimeInterval) {
+        let hits = sceneView.hitTest(point, options: nil)
+        guard let hit = hits.first(where: { !($0.node.name ?? "").hasPrefix("Cursor Tool") }),
+              let target = damageableOwner(for: hit.node),
+              let kind = target.userData?["damageKind"] as? String else {
+            statusLabel.stringValue = "Aim at the desk, device or a room prop and click."
+            return
+        }
+
+        moveCursorTool(to: point)
+        // Assumption: hold duration controls the arcade intensity; pointer velocity is ignored.
+        let holdFactor = Float(min(1.0, max(0.0, heldFor / 0.85)))
+        let clickIntensity = 0.38 + holdFactor * 0.82
+        let intensity = (toolPower[selectedTool] ?? 1.0) * damageLevel * clickIntensity
+        animateToolImpact(intensity: intensity)
+
+        let worldPoint = hit.worldCoordinates
+        let localPoint = hit.localCoordinates
+        let localNormal = hit.localNormal
+        let worldNormal = hit.worldNormal
+
+        deformMesh(hit.node, around: localPoint, normal: localNormal,
+                   radius: CGFloat(0.20 + intensity * 0.18),
+                   depth: CGFloat(0.035 + intensity * 0.09))
+
+        if let dynamicBody = nearestDynamicBody(from: hit.node) {
+            let applicationPoint = dynamicBody.convertPosition(worldPoint, from: nil)
+            let impulse = SCNVector3(
+                worldNormal.x * intensity * 3.2,
+                worldNormal.y * intensity * 3.2 + intensity * 0.45,
+                worldNormal.z * intensity * 3.2
+            )
+            dynamicBody.physicsBody?.applyForce(impulse, at: applicationPoint, asImpulse: true)
+        }
+
+        addImpactFlash(at: worldPoint, normal: worldNormal, intensity: intensity)
+        spawnArcadeDebris(at: worldPoint, normal: worldNormal, intensity: intensity, color: materialColor(of: hit.node))
+        playImpactSound(intensity: intensity)
+
+        if intensity > 1.02 {
+            switch kind {
+            case "devicePart":
+                detachPart(hit.node, at: worldPoint, normal: worldNormal, intensity: intensity)
+            case "desk":
+                if intensity > 1.25 {
+                    breakDesk(at: worldPoint, normal: worldNormal, intensity: intensity)
+                }
+            case "prop":
+                if intensity > 1.38 {
+                    detachPart(target, at: worldPoint, normal: worldNormal, intensity: intensity)
+                }
+            default:
+                break
+            }
+        }
+
+        let holdText = String(format: "%.2f", heldFor)
+        let amountText = String(format: "%.2f", intensity)
+        statusLabel.stringValue = "\(selectedTool) • \(kind) • hold \(holdText)s • arcade power \(amountText)"
+    }
+
+    private func nearestDynamicBody(from node: SCNNode) -> SCNNode? {
+        var current: SCNNode? = node
+        while let candidate = current {
+            if candidate.physicsBody?.type == .dynamic { return candidate }
+            current = candidate.parent
+        }
+        return nil
+    }
+
+    private func materialColor(of node: SCNNode) -> NSColor {
+        if let color = node.geometry?.firstMaterial?.diffuse.contents as? NSColor { return color }
+        return NSColor(calibratedRed: 0.34, green: 0.40, blue: 0.48, alpha: 1)
+    }
+
+    private func deformMesh(_ node: SCNNode, around point: SCNVector3, normal: SCNVector3,
+                            radius: CGFloat, depth: CGFloat) {
+        guard let geometry = node.geometry,
+              let source = geometry.sources(for: .vertex).first,
+              source.usesFloatComponents,
+              source.bytesPerComponent == MemoryLayout<Float>.size,
+              source.componentsPerVector >= 3 else { return }
+
+        var data = source.data
+        let stride = source.dataStride
+        let offset = source.dataOffset
+        data.withUnsafeMutableBytes { raw in
+            guard let base = raw.baseAddress else { return }
+            let values = base.assumingMemoryBound(to: Float.self)
+            for index in 0..<source.vectorCount {
+                let start = (offset + index * stride) / MemoryLayout<Float>.size
+                let dx = CGFloat(values[start] - point.x)
+                let dy = CGFloat(values[start + 1] - point.y)
+                let dz = CGFloat(values[start + 2] - point.z)
+                let distance = sqrt(dx * dx + dy * dy + dz * dz)
+                guard distance < radius else { continue }
+                let falloff = 1.0 - distance / radius
+                let centerWeight = falloff * falloff
+                let amount = Float(depth * centerWeight)
+                values[start] -= normal.x * amount
+                values[start + 1] -= normal.y * amount
+                values[start + 2] -= normal.z * amount
+            }
+        }
+
+        let replacement = SCNGeometrySource(
+            data: data,
+            semantic: .vertex,
+            vectorCount: source.vectorCount,
+            usesFloatComponents: source.usesFloatComponents,
+            componentsPerVector: source.componentsPerVector,
+            bytesPerComponent: source.bytesPerComponent,
+            dataOffset: source.dataOffset,
+            dataStride: source.dataStride
+        )
+        let updatedSources = geometry.sources.map { $0 === source ? replacement : $0 }
+        let updated = SCNGeometry(sources: updatedSources, elements: geometry.elements)
+        updated.materials = geometry.materials
+        node.geometry = updated
+    }
+
+    private func addImpactFlash(at point: SCNVector3, normal: SCNVector3, intensity: Float) {
+        let marker = SCNNode(geometry: SCNSphere(radius: CGFloat(0.055 + intensity * 0.025)))
+        marker.name = "Arcade impact flash"
+        let flashColor = NSColor(calibratedRed: 1.0, green: 0.48 + CGFloat(min(0.4, intensity * 0.1)), blue: 0.16, alpha: 1)
+        marker.geometry?.firstMaterial = material(flashColor, roughness: 0.25)
+        marker.geometry?.firstMaterial?.emission.contents = flashColor
+        marker.position = SCNVector3(point.x + normal.x * 0.045, point.y + normal.y * 0.045, point.z + normal.z * 0.045)
+        scene.rootNode.addChildNode(marker)
+        marker.runAction(.sequence([
+            .scale(to: 1.9, duration: 0.07),
+            .fadeOut(duration: 0.18),
+            .removeFromParentNode()
+        ]))
+    }
+
+    private func spawnArcadeDebris(at point: SCNVector3, normal: SCNVector3, intensity: Float, color: NSColor) {
+        let count = min(8, max(2, Int(intensity * 3.5)))
+        for _ in 0..<count {
+            let size = CGFloat.random(in: 0.035...0.10)
+            let chip = SCNNode(geometry: SCNBox(width: size, height: size * 0.55, length: size * 1.7, chamferRadius: 0.008))
+            chip.name = "Arcade debris"
+            chip.geometry?.firstMaterial = material(color.blended(withFraction: 0.25, of: .white) ?? color, roughness: 0.48)
+            chip.position = point
+            configureDebris(chip, mass: 0.025 + CGFloat(intensity) * 0.012)
+            scene.rootNode.addChildNode(chip)
+            let random = SCNVector3(Float.random(in: -1...1), Float.random(in: 0.2...1.2), Float.random(in: -1...1))
+            chip.physicsBody?.applyForce(SCNVector3(
+                (normal.x * 0.65 + random.x * 0.8) * intensity * 2.0,
+                (normal.y * 0.65 + random.y * 0.8) * intensity * 2.0,
+                (normal.z * 0.65 + random.z * 0.8) * intensity * 2.0
+            ), asImpulse: true)
+            chip.physicsBody?.applyTorque(SCNVector4(random.x, random.y, random.z, Float.random(in: 0.8...2.8)), asImpulse: true)
+        }
+    }
+
+    private func detachPart(_ node: SCNNode, at point: SCNVector3, normal: SCNVector3, intensity: Float) {
+        guard node.parent != nil, node.geometry != nil else { return }
+        let bounds = node.boundingBox
+        let span = SCNVector3(max(0.12, bounds.max.x - bounds.min.x),
+                              max(0.12, bounds.max.y - bounds.min.y),
+                              max(0.12, bounds.max.z - bounds.min.z))
+        let color = materialColor(of: node)
+        node.removeFromParentNode()
+
+        // The clicked point anchors the fragment cluster; the count scales with arcade power.
+        let columns = 2
+        let rows = 2
+        for column in 0..<columns {
+            for row in 0..<rows {
+                let shard = SCNNode(geometry: SCNBox(
+                    width: CGFloat(span.x / 2.2 * Float.random(in: 0.72...1.10)),
+                    height: CGFloat(span.y / 2.0 * Float.random(in: 0.72...1.10)),
+                    length: CGFloat(span.z / 2.2 * Float.random(in: 0.72...1.10)),
+                    chamferRadius: 0.012
+                ))
+                shard.name = "Detached arcade fragment"
+                shard.geometry?.firstMaterial = material(color, roughness: 0.55, metalness: 0.35)
+                shard.position = SCNVector3(
+                    point.x + (Float(column) - 0.5) * span.x * 0.22 + Float.random(in: -0.05...0.05),
+                    point.y + (Float(row) - 0.5) * span.y * 0.22 + Float.random(in: -0.05...0.05),
+                    point.z + Float.random(in: -0.07...0.07)
+                )
+                configureDebris(shard, mass: 0.10 + CGFloat(intensity) * 0.025)
+                scene.rootNode.addChildNode(shard)
+                let random = SCNVector3(Float.random(in: -1...1), Float.random(in: 0.25...1.2), Float.random(in: -1...1))
+                shard.physicsBody?.applyForce(SCNVector3(
+                    (normal.x + random.x * 0.75) * intensity * 2.8,
+                    (normal.y + random.y * 0.8) * intensity * 2.8,
+                    (normal.z + random.z * 0.75) * intensity * 2.8
+                ), asImpulse: true)
+                shard.physicsBody?.applyTorque(SCNVector4(random.x, random.y, random.z, Float.random(in: 1.0...3.5)), asImpulse: true)
+            }
+        }
+    }
+
+    private func breakDesk(at point: SCNVector3, normal: SCNVector3, intensity: Float) {
+        guard let desk = scene.rootNode.childNodes.first(where: { $0.name == "Workbench desk top" }) else { return }
+        let origin = desk.presentation.worldPosition
+        desk.removeFromParentNode()
+        for row in 0..<3 {
+            for column in 0..<4 {
+                let plank = SCNNode(geometry: SCNBox(width: 1.85, height: 0.20, length: 1.47, chamferRadius: 0.025))
+                plank.name = "Detached workbench plank"
+                plank.geometry?.firstMaterial = material(NSColor(calibratedRed: 0.31, green: 0.20, blue: 0.13, alpha: 1), roughness: 0.82)
+                plank.position = SCNVector3(origin.x + (Float(column) - 1.5) * 1.9,
+                                             origin.y + Float.random(in: -0.03...0.06),
+                                             origin.z + (Float(row) - 1) * 1.50)
+                configureDebris(plank, mass: 0.65)
+                scene.rootNode.addChildNode(plank)
+                let away = SCNVector3(plank.position.x - point.x, 0, plank.position.z - point.z)
+                plank.physicsBody?.applyForce(SCNVector3(
+                    away.x * 0.8 + normal.x * intensity,
+                    intensity * 0.75,
+                    away.z * 0.8 + normal.z * intensity
+                ), asImpulse: true)
+                plank.physicsBody?.applyTorque(SCNVector4(Float.random(in: -1...1), Float.random(in: -1...1), Float.random(in: -1...1), 2.2), asImpulse: true)
+            }
+        }
+    }
+
+    private func configureDebris(_ node: SCNNode, mass: CGFloat) {
+        guard let geometry = node.geometry else { return }
+        node.physicsBody = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: geometry, options: nil))
+        node.physicsBody?.mass = mass
+        node.physicsBody?.friction = 0.68
+        node.physicsBody?.restitution = 0.28
+        node.physicsBody?.linearDamping = 0.05
+        node.physicsBody?.angularDamping = 0.12
+        node.physicsBody?.collisionBitMask = -1
+        node.physicsBody?.contactTestBitMask = -1
+        if node.userData == nil { node.userData = NSMutableDictionary() }
+        node.userData?["debrisBorn"] = CACurrentMediaTime()
+        debrisCount += 1
+    }
+
+    private func orbitCamera(dx: CGFloat, dy: CGFloat) {
+        cameraYaw = min(0.78, max(-0.78, cameraYaw - Float(dx) * 0.004))
+        cameraPitch = min(0.52, max(0.10, cameraPitch + Float(dy) * 0.003))
+        updateCamera()
+    }
+
+    private func zoomCamera(delta: CGFloat) {
+        cameraDistance = min(12.2, max(7.6, cameraDistance - Float(delta) * 0.012))
+        updateCamera()
+    }
+
+    private func updateCamera() {
+        guard let cameraNode else { return }
+        let target = SCNVector3(0, 1.38, 0)
+        let horizontal = cameraDistance * cos(cameraPitch)
+        cameraNode.position = SCNVector3(sin(cameraYaw) * horizontal,
+                                         target.y + sin(cameraPitch) * cameraDistance,
+                                         cos(cameraYaw) * horizontal)
+        cameraNode.look(at: target)
+    }
+
+    private func setupImpactAudio() {
+        let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1)!
+        audioFormat = format
+        audioEngine.attach(impactPlayer)
+        audioEngine.connect(impactPlayer, to: audioEngine.mainMixerNode, format: format)
+        do {
+            try audioEngine.start()
+            impactPlayer.play()
+        } catch {
+            // If audio is unavailable, all visual gameplay still works.
+        }
+    }
+
+    private func playImpactSound(intensity: Float) {
+        guard let format = audioFormat,
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 8820),
+              let channel = buffer.floatChannelData?[0] else { return }
+        buffer.frameLength = 8820
+        let level = min(1.6, max(0.18, Double(intensity)))
+        let frequency = 88.0 + level * 62.0
+        for index in 0..<Int(buffer.frameLength) {
+            let time = Double(index) / format.sampleRate
+            let envelope = exp(-time * (13.0 - min(3.0, level)))
+            let fundamental = sin(2.0 * Double.pi * frequency * time)
+            let overtone = sin(2.0 * Double.pi * frequency * 2.45 * time) * 0.23
+            let noise = Double.random(in: -1.0...1.0) * 0.10
+            channel[index] = Float((fundamental * 0.68 + overtone + noise) * envelope * (0.16 + level * 0.18))
+        }
+        impactPlayer.scheduleBuffer(buffer, completionHandler: nil)
+    }
+
+    func physicsWorld(_ world: SCNPhysicsWorld, didBegin contact: SCNPhysicsContact) {
+        let now = CACurrentMediaTime()
+        guard now - lastImpactSoundTime > 0.10, contact.collisionImpulse > 0.45 else { return }
+        lastImpactSoundTime = now
+        playImpactSound(intensity: Float(min(1.8, contact.collisionImpulse / 7.0)))
+    }
+
+    func renderer(_ renderer: SCNSceneRenderer, didSimulatePhysicsAtTime time: TimeInterval) {
+        let now = CACurrentMediaTime()
+        let expired = scene.rootNode.childNodes.filter { node in
+            guard let born = node.userData?["debrisBorn"] as? Double else { return false }
+            return now - born > 11 || node.presentation.worldPosition.y < -2
+        }
+        for node in expired {
+            node.removeFromParentNode()
+            debrisCount = max(0, debrisCount - 1)
+        }
+    }
+
     private func popup(_ items: [String], selected: String) -> NSPopUpButton {
         let p = NSPopUpButton()
         p.addItems(withTitles: items)
@@ -550,7 +963,11 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             root.addChildNode(speaker)
         }
 
-        root.position = SCNVector3(0, 0.02, 0)
+        for child in root.childNodes {
+            tagSubtree(child, kind: "devicePart")
+        }
+        root.position = SCNVector3(0, deskTopY + 0.18, 0)
+        root.name = selectedDevice
         let collisionSize: SCNVector3 = selectedDevice == "MacBook" ? SCNVector3(3.0, 2.0, 2.0) : (selectedDevice == "Desktop PC" ? SCNVector3(3.0, 2.0, 1.0) : (selectedDevice == "iPad" ? SCNVector3(2.3, 0.35, 3.0) : SCNVector3(1.3, 0.45, 2.5)))
         let collisionGeometry = SCNBox(width: CGFloat(collisionSize.x), height: CGFloat(collisionSize.y), length: CGFloat(collisionSize.z), chamferRadius: 0.05)
         root.physicsBody = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: collisionGeometry, options: nil))
@@ -559,6 +976,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         root.physicsBody?.restitution = 0.12
         root.physicsBody?.angularDamping = 0.42
         root.physicsBody?.categoryBitMask = 1
+        root.physicsBody?.collisionBitMask = -1
+        root.physicsBody?.contactTestBitMask = -1
         scene.rootNode.addChildNode(root)
         deviceRoot = root
     }
@@ -570,8 +989,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     }
 
     @objc private func toolChanged(_ sender: NSPopUpButton) {
-        selectedTool = sender.titleOfSelectedItem ?? "Hammer"
-        statusLabel.stringValue = "Tool selected: \(selectedTool)."
+        selectedTool = sender.titleOfSelectedItem ?? "Precision Hammer"
+        buildCursorTool()
+        statusLabel.stringValue = "Selected \(selectedTool). Move the mouse and click; longer holds make stronger arcade hits."
     }
 
     @objc private func roomChanged(_ sender: NSPopUpButton) {
@@ -620,7 +1040,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
     @objc private func dropObject() {
         guard let target = deviceRoot else { return }
-        target.position = SCNVector3(0, 5.2, 0)
+        target.position = SCNVector3(0, deskTopY + 4.0, 0)
         target.physicsBody?.velocity = SCNVector3Zero
         target.physicsBody?.angularVelocity = SCNVector4Zero
         target.physicsBody?.applyForce(SCNVector3(Float.random(in: -3...3), 0, Float.random(in: -2...2)), asImpulse: true)
@@ -629,7 +1049,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
     @objc private func resetScene() {
         buildScene()
-        statusLabel.stringValue = "Scene reset. All simulated damage and props cleared."
+        statusLabel.stringValue = "Scene reset. The workbench, room and device have been restored."
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
