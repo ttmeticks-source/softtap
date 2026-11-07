@@ -18,15 +18,33 @@ for size in sizes {
     let bounds = NSRect(x:0,y:0,width:size,height:size)
     NSColor(calibratedRed:0.07,green:0.10,blue:0.16,alpha:1).setFill()
     NSBezierPath(roundedRect:bounds,xRadius:Double(size)*0.22,yRadius:Double(size)*0.22).fill()
-    let device = NSBezierPath(roundedRect:NSRect(x:Double(size)*0.28,y:Double(size)*0.12,width:Double(size)*0.44,height:Double(size)*0.76),xRadius:Double(size)*0.07,yRadius:Double(size)*0.07)
-    NSColor(calibratedWhite:0.72,alpha:1).setFill(); device.fill()
-    let screen = NSBezierPath(roundedRect:NSRect(x:Double(size)*0.315,y:Double(size)*0.22,width:Double(size)*0.37,height:Double(size)*0.56),xRadius:Double(size)*0.025,yRadius:Double(size)*0.025)
-    NSColor(calibratedRed:0.02,green:0.035,blue:0.06,alpha:1).setFill(); screen.fill()
-    let slash = NSBezierPath()
-    slash.lineWidth = max(2,Double(size)*0.035)
-    slash.move(to:NSPoint(x:Double(size)*0.40,y:Double(size)*0.68))
-    slash.line(to:NSPoint(x:Double(size)*0.60,y:Double(size)*0.43))
-    NSColor(calibratedRed:1,green:0.35,blue:0.18,alpha:1).setStroke(); slash.stroke()
+    let inset = Double(size)*0.045
+    let background = NSBezierPath(roundedRect:NSRect(x:inset,y:inset,width:Double(size)-2*inset,height:Double(size)-2*inset),xRadius:Double(size)*0.22,yRadius:Double(size)*0.22)
+    let gradient = NSGradient(colors:[
+        NSColor(calibratedRed:0.035,green:0.10,blue:0.19,alpha:1),
+        NSColor(calibratedRed:0.10,green:0.20,blue:0.30,alpha:1)
+    ])!
+    gradient.draw(in:background,angle:135)
+    let ring = NSBezierPath(ovalIn:NSRect(x:Double(size)*0.13,y:Double(size)*0.13,width:Double(size)*0.74,height:Double(size)*0.74))
+    NSColor(calibratedRed:0.25,green:0.72,blue:0.88,alpha:0.22).setStroke()
+    ring.lineWidth = max(1,Double(size)*0.018)
+    ring.stroke()
+    let handle = NSBezierPath()
+    handle.move(to:NSPoint(x:Double(size)*0.39,y:Double(size)*0.27))
+    handle.line(to:NSPoint(x:Double(size)*0.66,y:Double(size)*0.62))
+    handle.lineCapStyle = .round
+    handle.lineWidth = max(3,Double(size)*0.095)
+    NSColor(calibratedRed:0.72,green:0.78,blue:0.84,alpha:1).setStroke()
+    handle.stroke()
+    let head = NSBezierPath(roundedRect:NSRect(x:Double(size)*0.23,y:Double(size)*0.59,width:Double(size)*0.48,height:Double(size)*0.19),xRadius:Double(size)*0.055,yRadius:Double(size)*0.055)
+    NSColor(calibratedRed:0.91,green:0.45,blue:0.23,alpha:1).setFill()
+    head.fill()
+    let highlight = NSBezierPath()
+    highlight.move(to:NSPoint(x:Double(size)*0.29,y:Double(size)*0.70))
+    highlight.line(to:NSPoint(x:Double(size)*0.62,y:Double(size)*0.70))
+    highlight.lineWidth = max(1,Double(size)*0.018)
+    NSColor(calibratedWhite:1,alpha:0.72).setStroke()
+    highlight.stroke()
     image.unlockFocus()
     let tiff = image.tiffRepresentation!
     let rep = NSBitmapImageRep(data:tiff)!
