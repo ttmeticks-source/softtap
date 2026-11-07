@@ -39,6 +39,10 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private var windowIntactGlass: SCNNode?
     private var windowShardGroup: SCNNode?
     private var windowHasBroken = false
+    private var windowHitCount = 0
+    private var internalParts: [SCNNode] = []
+    private var deviceShellParts: [SCNNode] = []
+    private var showingInternals = false
     private var damageLevel: Float = 0.72
     private var roomStyle = "Studio"
     private var statusLabel: NSTextField!
@@ -123,7 +127,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         let hit = makeButton("STRIKE OBJECT", action: #selector(strike))
         let drop = makeButton("DROP FROM HEIGHT", action: #selector(dropObject))
         let reset = makeButton("RESET SCENE", action: #selector(resetScene))
-        sidebar.addSubview(hit); sidebar.addSubview(drop); sidebar.addSubview(reset)
+        let internals = makeButton("TOGGLE DEVICE INTERNALS", action: #selector(toggleDeviceInternals))
+        sidebar.addSubview(hit); sidebar.addSubview(drop); sidebar.addSubview(reset); sidebar.addSubview(internals)
 
         statusLabel = NSTextField(wrappingLabelWithString: "Ready. Choose a device, room and tool.")
         statusLabel.font = .systemFont(ofSize: 11)
@@ -177,6 +182,10 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             reset.leadingAnchor.constraint(equalTo: hit.leadingAnchor),
             reset.trailingAnchor.constraint(equalTo: hit.trailingAnchor),
             reset.topAnchor.constraint(equalTo: drop.bottomAnchor, constant: 9),
+            internals.leadingAnchor.constraint(equalTo: hit.leadingAnchor),
+            internals.trailingAnchor.constraint(equalTo: hit.trailingAnchor),
+            internals.topAnchor.constraint(equalTo: reset.bottomAnchor, constant: 9),
+            statusLabel.topAnchor.constraint(greaterThanOrEqualTo: internals.bottomAnchor, constant: 10),
             statusLabel.leadingAnchor.constraint(equalTo: heading.leadingAnchor),
             statusLabel.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -18),
             statusLabel.bottomAnchor.constraint(equalTo: sidebar.bottomAnchor, constant: -22)
@@ -774,7 +783,10 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
     private func makeDevice() {
         deviceRoot?.removeFromParentNode()
+        internalParts.removeAll()
+        deviceShellParts.removeAll()
         let root = SCNNode()
+        root.name = "Selected device body"
         let dark = material(NSColor(calibratedWhite: 0.075, alpha: 1), roughness: 0.24)
         let metal = material(NSColor(calibratedWhite: 0.48, alpha: 1), roughness: 0.28)
         let glass = material(NSColor(calibratedRed: 0.025, green: 0.045, blue: 0.075, alpha: 1), roughness: 0.08)
@@ -785,10 +797,31 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             n.position = pos
             return n
         }
+        func addShell(_ node: SCNNode) {
+            deviceShellParts.append(node)
+            root.addChildNode(node)
+        }
+        func addInternalBox(_ name: String, _ size: SCNVector3, _ pos: SCNVector3, _ color: NSColor, _ roughness: CGFloat = 0.48) {
+            let node = box(size.x, size.y, size.z, material(color, roughness: roughness), pos, 0.025)
+            node.name = name
+            node.isHidden = !showingInternals
+            internalParts.append(node)
+            root.addChildNode(node)
+        }
+        func addInternalCylinder(_ name: String, radius: CGFloat, height: CGFloat, position: SCNVector3, color: NSColor) {
+            let geometry = SCNCylinder(radius: radius, height: height)
+            geometry.firstMaterial = material(color, roughness: 0.38)
+            let node = SCNNode(geometry: geometry)
+            node.name = name
+            node.position = position
+            node.isHidden = !showingInternals
+            internalParts.append(node)
+            root.addChildNode(node)
+        }
 
         switch selectedDevice {
         case "MacBook":
-            root.addChildNode(box(3.0, 0.16, 2.0, metal, SCNVector3(0, 0.12, 0)))
+            addShell(box(3.0, 0.16, 2.0, metal, SCNVector3(0, 0.12, 0)))
             root.addChildNode(box(2.88, 0.035, 1.88, dark, SCNVector3(0, 0.215, 0)))
             let display = box(2.85, 1.85, 0.12, metal, SCNVector3(0, 1.12, -0.90))
             display.eulerAngles.x = -0.10
@@ -816,6 +849,52 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             speaker.geometry?.firstMaterial = metal
             speaker.position = SCNVector3(0, 0.305, 1.02)
             root.addChildNode(speaker)
+        }
+
+        // Layered, stylized internal assemblies are separate scene nodes so the
+        // casing can be hidden for an inspection view without changing the body physics.
+        let board = NSColor(calibratedRed: 0.035, green: 0.20, blue: 0.16, alpha: 1)
+        let copper = NSColor(calibratedRed: 0.72, green: 0.39, blue: 0.16, alpha: 1)
+        let graphite = NSColor(calibratedRed: 0.12, green: 0.14, blue: 0.17, alpha: 1)
+        let silver = NSColor(calibratedWhite: 0.68, alpha: 1)
+        switch selectedDevice {
+        case "MacBook":
+            addInternalBox("MacBook logic board", SCNVector3(1.42, 0.045, 0.48), SCNVector3(0, 0.34, -0.55), board)
+            addInternalBox("MacBook battery pack", SCNVector3(2.18, 0.055, 0.62), SCNVector3(0, 0.34, 0.48), graphite)
+            addInternalBox("MacBook SSD module", SCNVector3(0.72, 0.035, 0.20), SCNVector3(0.42, 0.39, -0.72), silver)
+            for x: CGFloat in [-0.48, 0.48] {
+                addInternalCylinder("Cooling fan", radius: 0.22, height: 0.07, position: SCNVector3(x, 0.39, -0.50), color: graphite)
+                addInternalBox("Heat pipe", SCNVector3(0.10, 0.035, 0.62), SCNVector3(x * 0.55, 0.41, -0.12), copper)
+            }
+            for i in 0..<6 {
+                addInternalBox("Memory and power component", SCNVector3(0.12, 0.04, 0.08), SCNVector3(-0.55 + CGFloat(i) * 0.22, 0.40, -0.70), copper)
+            }
+        case "Desktop PC":
+            addInternalBox("PC motherboard", SCNVector3(0.62, 1.25, 0.045), SCNVector3(2.05, 0.86, 0.02), board)
+            addInternalBox("Graphics card", SCNVector3(0.56, 0.20, 0.66), SCNVector3(2.05, 0.55, 0.12), graphite)
+            addInternalBox("CPU heatsink", SCNVector3(0.30, 0.20, 0.30), SCNVector3(2.05, 1.03, 0.12), silver)
+            addInternalBox("Power supply", SCNVector3(0.60, 0.30, 0.62), SCNVector3(2.05, 0.28, 0.10), graphite)
+            for i in 0..<4 {
+                addInternalBox("RAM module", SCNVector3(0.07, 0.48, 0.045), SCNVector3(1.65 + CGFloat(i) * 0.12, 0.90, 0.06), copper)
+            }
+            for y: CGFloat in [0.48, 1.10] {
+                addInternalCylinder("Case fan", radius: 0.25, height: 0.06, position: SCNVector3(2.05, y, 0.32), color: graphite)
+            }
+        case "iPad":
+            addInternalBox("Tablet logic board", SCNVector3(0.38, 0.045, 1.42), SCNVector3(0.62, 0.38, 0), board)
+            addInternalBox("Tablet battery", SCNVector3(1.22, 0.05, 1.55), SCNVector3(-0.36, 0.37, 0), graphite)
+            addInternalBox("Tablet camera module", SCNVector3(0.22, 0.06, 0.24), SCNVector3(0.82, 0.42, -1.12), copper)
+            for i in 0..<5 {
+                addInternalBox("Tablet connector", SCNVector3(0.10, 0.035, 0.22), SCNVector3(0.50, 0.42, -0.65 + CGFloat(i) * 0.28), silver)
+            }
+        default:
+            addInternalBox("Phone logic board", SCNVector3(0.34, 0.045, 0.92), SCNVector3(0.40, 0.37, -0.52), board)
+            addInternalBox("Phone battery", SCNVector3(0.60, 0.05, 1.18), SCNVector3(-0.22, 0.36, 0.08), graphite)
+            addInternalBox("Phone camera module", SCNVector3(0.34, 0.07, 0.42), SCNVector3(0.39, 0.41, -0.91), copper)
+            addInternalCylinder("Phone speaker", radius: 0.075, height: 0.05, position: SCNVector3(0, 0.39, 1.02), color: silver)
+            for i in 0..<5 {
+                addInternalBox("Phone ribbon connector", SCNVector3(0.055, 0.025, 0.28), SCNVector3(-0.42 + CGFloat(i) * 0.19, 0.41, -0.55 + CGFloat(i % 2) * 0.52), copper)
+            }
         }
 
         let collisionSize: SCNVector3 = selectedDevice == "MacBook" ? SCNVector3(3.0, 1.94, 2.0) : (selectedDevice == "Desktop PC" ? SCNVector3(3.0, 2.15, 1.0) : (selectedDevice == "iPad" ? SCNVector3(2.3, 0.16, 3.0) : SCNVector3(1.3, 0.205, 2.5)))
@@ -851,6 +930,15 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         }
         scene.rootNode.addChildNode(root)
         deviceRoot = root
+    }
+
+    @objc private func toggleDeviceInternals() {
+        showingInternals.toggle()
+        deviceShellParts.forEach { $0.isHidden = showingInternals }
+        internalParts.forEach { $0.isHidden = !showingInternals }
+        statusLabel.stringValue = showingInternals
+            ? "Inspection view: internal boards, batteries, cooling and connectors."
+            : "Exterior casing view restored."
     }
 
     @objc private func deviceChanged(_ sender: NSPopUpButton) {
