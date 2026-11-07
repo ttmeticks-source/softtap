@@ -1,9 +1,12 @@
-# Recorded audio overrides
+# Recorded audio assets
 
-Place original WAV recordings in this folder. The macOS build copies WAV files from
-this folder over the generated placeholder effects when packaging the app.
+The app no longer synthesizes or bundles generated placeholder effects.
 
-Use these exact base names (44.1 kHz PCM WAV is recommended):
+To enable sound, place genuine recordings that you created or have permission to
+use in this folder as 44.1 kHz PCM WAV files. The build copies these into the app.
+Missing sounds remain silent rather than being replaced with synthetic audio.
+
+Use these exact base names:
 
 - tool_swing.wav
 - device_tap.wav
@@ -18,15 +21,19 @@ Use these exact base names (44.1 kHz PCM WAV is recommended):
 - device_rattle.wav
 - glass_crackle.wav
 - debris_scatter.wav
+- hammer_impact.wav
 - sledgehammer_impact.wav
+- mallet_impact.wav
 - crowbar_creak.wav
+- wrench_impact.wav
+- screwdriver_tap.wav
 - drill_whirr.wav
 - saw_whine.wav
+- impact_driver_impact.wav
+- spudger_snap.wav
+- suction_pop.wav
 - fire_roar.wav
 - water_spray.wav
 - steam_hiss.wav
 
-Alternate takes may also be supplied with an `_alt` suffix, for example `fire_roar_alt.wav`.
-
-Only add recordings you created or have permission to use. If a file is absent,
-the build keeps the generated placeholder for that sound.
+Optional alternate takes use an _alt suffix, such as glass_crackle_alt.wav.

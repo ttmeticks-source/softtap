@@ -74,9 +74,6 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private var activeFireEffects: [SCNNode] = []
     private var roomStyle = "Studio"
     private var statusLabel: NSTextField!
-    private var scoreLabel: NSTextField!
-    private var damageScore = 0
-    private var hitCount = 0
     private var devicePopup: NSPopUpButton!
     private var toolPopup: NSPopUpButton!
     private var roomPopup: NSPopUpButton!
@@ -205,19 +202,6 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         sceneContainer.wantsLayer = true
         sceneContainer.layer?.backgroundColor = NSColor(calibratedRed: 0.055, green: 0.075, blue: 0.11, alpha: 1).cgColor
         root.addSubview(sceneContainer)
-        let hud = NSTextField(labelWithString: "SCORE 0000  •  HITS 00")
-        scoreLabel = hud
-        hud.font = .systemFont(ofSize: 10, weight: .bold)
-        hud.textColor = NSColor(calibratedRed: 0.76, green: 0.91, blue: 0.96, alpha: 1)
-        hud.alignment = .center
-        hud.wantsLayer = true
-        hud.layer?.backgroundColor = NSColor(calibratedRed: 0.035, green: 0.075, blue: 0.10, alpha: 0.88).cgColor
-        hud.layer?.cornerRadius = 8
-        hud.layer?.borderWidth = 1
-        hud.layer?.borderColor = NSColor(calibratedRed: 0.18, green: 0.42, blue: 0.50, alpha: 1).cgColor
-        hud.translatesAutoresizingMaskIntoConstraints = false
-        root.addSubview(hud)
-
         NSLayoutConstraint.activate([
             sidebar.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             sidebar.topAnchor.constraint(equalTo: root.topAnchor),
@@ -227,10 +211,6 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             sceneContainer.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             sceneContainer.topAnchor.constraint(equalTo: root.topAnchor),
             sceneContainer.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-            hud.topAnchor.constraint(equalTo: root.topAnchor, constant: 16),
-            hud.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -18),
-            hud.widthAnchor.constraint(equalToConstant: 220),
-            hud.heightAnchor.constraint(equalToConstant: 28),
             heading.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 20),
             heading.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 25),
             subtitle.leadingAnchor.constraint(equalTo: heading.leadingAnchor),
@@ -1362,7 +1342,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                 addShellSphere("Earbud head", radius: 0.12, position: SCNVector3(x, 0.83, 0.04), surface: dark)
             }
         default:
-            root.addChildNode(box(1.25, 0.16, 2.45, metal, SCNVector3(0, 0.18, 0), 0.14))
+            let phoneFrame = box(1.25, 0.16, 2.45, metal, SCNVector3(0, 0.18, 0), 0.14)
+            phoneFrame.name = "Phone aluminium frame"
+            addShell(phoneFrame)
             let phoneScreen = box(1.12, 0.035, 2.28, glass, SCNVector3(0, 0.28, 0), 0.12)
             phoneScreen.name = "Phone screen glass"
             root.addChildNode(phoneScreen)
@@ -1506,6 +1488,17 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             addInternalCylinder("Phone speaker", radius: 0.075, height: 0.05, position: SCNVector3(0, 0.39, 1.02), color: silver)
             for i in 0..<5 {
                 addInternalBox("Phone ribbon connector", SCNVector3(0.055, 0.025, 0.28), SCNVector3(-0.42 + CGFloat(i) * 0.19, 0.41, -0.55 + CGFloat(i % 2) * 0.52), copper)
+            }
+            addInternalBox("Phone graphite battery shield", SCNVector3(0.66, 0.018, 1.20), SCNVector3(-0.22, 0.405, 0.08), silver, 0.72)
+            addInternalBox("Phone display flex cable", SCNVector3(0.035, 0.018, 0.62), SCNVector3(0.05, 0.425, 0.45), copper, 0.24)
+            addInternalBox("Phone wireless charging coil", SCNVector3(0.72, 0.012, 0.72), SCNVector3(-0.18, 0.415, 0.22), graphite, 0.88)
+            addInternalCylinder("Phone haptic motor", radius: 0.095, height: 0.055, position: SCNVector3(0.43, 0.42, 0.42), color: silver)
+            addInternalBox("Phone SIM tray assembly", SCNVector3(0.24, 0.025, 0.08), SCNVector3(-0.48, 0.405, -0.90), silver, 0.28)
+            for x: CGFloat in [-0.53, 0.53] {
+                for z: CGFloat in [-1.08, 1.08] {
+                    addInternalCylinder("Phone frame retaining screw", radius: 0.018, height: 0.012,
+                                        position: SCNVector3(x, 0.425, z), color: silver)
+                }
             }
         }
 
@@ -1833,10 +1826,12 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private func deformImpactMesh(_ part: SCNNode, worldPoint: SCNVector3, worldNormal: SCNVector3, intensity: CGFloat) {
         guard var geometry = part.geometry else { return }
         if let box = geometry as? SCNBox {
+            // High subdivision is required for broad dents and folded edges to
+            // read as geometry rather than a flat decal.
             let dense = SCNBox(width: box.width, height: box.height, length: box.length, chamferRadius: min(box.chamferRadius, 0.012))
-            dense.widthSegmentCount = 18
-            dense.heightSegmentCount = 18
-            dense.lengthSegmentCount = 18
+            dense.widthSegmentCount = 28
+            dense.heightSegmentCount = 28
+            dense.lengthSegmentCount = 28
             dense.materials = geometry.materials
             geometry = dense
         }
@@ -1854,11 +1849,13 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         let profile = deformationProfile(for: part)
         // A broad falloff makes the surrounding panel bow and flex with the
         // impact instead of producing an isolated pin-sized indentation.
-        let radius = max(0.18, tangent * 0.72)
-        let yieldedLoad = max(0.04, intensity - profile.yield)
+        let radius = max(0.12, tangent * 0.56)
+        let yieldedLoad = max(0.08, intensity - profile.yield)
         let retainedLoad = yieldedLoad * (1.0 - profile.springback)
-        let depth = min(0.34, max(0.055, tangent * 0.22)) *
-                    min(2.5, max(0.55, retainedLoad * 1.45)) * profile.stiffness
+        // A deeper permanent dish plus a raised compression lip makes the
+        // struck panel visibly buckle and keeps the shape after the hit.
+        let depth = min(0.52, max(0.075, tangent * 0.30)) *
+                    min(3.1, max(0.75, retainedLoad * 1.85)) * profile.stiffness
         var vertices = [SCNVector3]()
         vertices.reserveCapacity(source.vectorCount)
         source.data.withUnsafeBytes { raw in
@@ -1893,7 +1890,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             }
             if facing > 0 && effectiveRadial < radius * 2.2 {
                 let falloff = exp(-pow(effectiveRadial / radius, 2) * 1.55)
-                let shoulder = exp(-pow((effectiveRadial - radius * 1.18) / (radius * 0.30), 2)) * 0.16
+                let shoulder = exp(-pow((effectiveRadial - radius * 1.12) / (radius * 0.26), 2)) * 0.24
                 let push = depth * (falloff - shoulder)
                 // A small tangential component makes the surrounding mesh roll
                 // into the impact rather than translating only along the normal.
@@ -1951,51 +1948,118 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         part.geometry = dented
     }
 
+    private func breakDevicePart(_ part: SCNNode, at point: SCNVector3, normal: SCNVector3) {
+        guard part.parent === deviceRoot, let geometry = part.geometry else { return }
+        let bounds = geometry.boundingBox
+        let size = SCNVector3(max(0.025, bounds.max.x - bounds.min.x),
+                              max(0.025, bounds.max.y - bounds.min.y),
+                              max(0.012, bounds.max.z - bounds.min.z))
+        let localCenter = SCNVector3((bounds.min.x + bounds.max.x) * 0.5,
+                                     (bounds.min.y + bounds.max.y) * 0.5,
+                                     (bounds.min.z + bounds.max.z) * 0.5)
+        let centerWorld = part.presentation.convertPosition(localCenter, to: nil)
+        let originalMaterial = geometry.firstMaterial ?? material(.gray, roughness: 0.45)
+        let identity = (part.name ?? "").lowercased()
+        let isGlass = identity.contains("screen") || identity.contains("glass") || identity.contains("display")
+        let worldTransform = part.presentation.worldTransform
+        part.removeFromParentNode()
+        deviceShellParts.removeAll { $0 === part }
+        breakableComponents.removeAll { $0 === part }
+
+        if isGlass {
+            // The display becomes multiple independently simulated glass pieces.
+            for _ in 0..<11 {
+                let shardWidth = max(0.035, size.x * CGFloat.random(in: 0.12...0.30))
+                let shardHeight = max(0.035, size.y * CGFloat.random(in: 0.10...0.25))
+                let shardDepth = max(0.012, size.z * 1.8)
+                let shardGeometry = SCNBox(width: shardWidth, height: shardHeight,
+                                           length: shardDepth, chamferRadius: 0.002)
+                shardGeometry.firstMaterial = originalMaterial
+                let shard = SCNNode(geometry: shardGeometry)
+                shard.name = "Broken display glass shard"
+                shard.position = SCNVector3(centerWorld.x + CGFloat.random(in: -size.x * 0.40...size.x * 0.40),
+                                            centerWorld.y + CGFloat.random(in: -size.y * 0.40...size.y * 0.40),
+                                            centerWorld.z + CGFloat.random(in: -size.z * 0.8...size.z * 0.8))
+                shard.eulerAngles = SCNVector3(CGFloat.random(in: -0.8...0.8),
+                                               CGFloat.random(in: -0.8...0.8),
+                                               CGFloat.random(in: -1.2...1.2))
+                let body = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: shardGeometry, options: nil))
+                configureDynamicBody(body, mass: 0.012, friction: 0.42, restitution: 0.08, angularDamping: 0.22)
+                shard.physicsBody = body
+                scene.rootNode.addChildNode(shard)
+                let kick = CGFloat.random(in: 0.18...0.42)
+                body.applyForce(SCNVector3(normal.x * kick + CGFloat.random(in: -0.12...0.12),
+                                           normal.y * kick + CGFloat.random(in: 0.04...0.22),
+                                           normal.z * kick + CGFloat.random(in: -0.12...0.12)), asImpulse: true)
+                detachedDeviceParts.append(shard)
+            }
+            playSpatial("glass_shatter", at: point, volume: 1.0)
+            playSpatial("debris_scatter", at: point, volume: 0.72)
+            statusLabel.stringValue = "Display fractured — loose glass pieces are falling."
+        } else {
+            scene.rootNode.addChildNode(part)
+            part.transform = worldTransform
+            let volume = size.x * size.y * size.z
+            let body = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: geometry, options: nil))
+            configureDynamicBody(body, mass: min(0.72, max(0.025, volume * 2.4)),
+                                 friction: 0.58, restitution: 0.055, angularDamping: 0.38)
+            part.physicsBody = body
+            let kick = CGFloat.random(in: 0.32...0.78)
+            body.applyForce(SCNVector3(normal.x * kick + CGFloat.random(in: -0.16...0.16),
+                                       normal.y * kick + CGFloat.random(in: 0.08...0.30),
+                                       normal.z * kick + CGFloat.random(in: -0.16...0.16)), asImpulse: true)
+            detachedDeviceParts.append(part)
+            playSpatial("device_rattle", at: point, volume: 0.92)
+            statusLabel.stringValue = "A casing component fractured and detached."
+        }
+    }
+
     private func damageDevicePart(_ part: SCNNode, at point: SCNVector3, normal: SCNVector3, intensity: CGFloat) {
         guard part.geometry != nil, part !== deviceRoot else { return }
         let key = ObjectIdentifier(part)
-        let accumulated = (devicePartDamage[key] ?? 0) + max(0.06, intensity * 0.30)
+        let previous = devicePartDamage[key] ?? 0
+        let accumulated = previous + max(0.14, intensity * 0.62)
         devicePartDamage[key] = accumulated
-        deformImpactMesh(part, worldPoint: point, worldNormal: normal, intensity: intensity)
-        // Permanent progressive flex: the shell visibly kinks and stays bent between hits.
         let profile = deformationProfile(for: part)
-        let elasticLoad = max(0.0, intensity - profile.yield) * profile.springback
-        let bend = min(0.045, (intensity * 0.0045 + elasticLoad * 0.002)) * profile.stiffness
+        deformImpactMesh(part, worldPoint: point, worldNormal: normal,
+                         intensity: intensity + min(2.0, accumulated * 0.18))
+
+        // The casing keeps a permanent crease and accumulated fold. A brief
+        // elastic wobble is layered over the retained bent geometry.
+        let bend = min(0.13, (intensity * 0.014 + accumulated * 0.0045)) * profile.stiffness
         part.eulerAngles.x += normal.z * bend
-        part.eulerAngles.z += normal.x * bend * CGFloat.random(in: 0.7...1.3)
-        // A short elastic rebound rides on top of the persistent mesh dent.
-        // The mesh itself is never restored, so the accumulated dent survives.
+        part.eulerAngles.z += normal.x * bend * CGFloat.random(in: 0.75...1.25)
         part.removeAction(forKey: "contact-elastic-flex")
-        let flexX = normal.z * min(0.018, bend * 0.55)
-        let flexZ = normal.x * min(0.018, bend * 0.55)
+        let flexX = normal.z * min(0.035, bend * 0.48)
+        let flexZ = normal.x * min(0.035, bend * 0.48)
         let flex = SCNAction.sequence([
-            SCNAction.rotateBy(x: flexX, y: 0, z: flexZ, duration: 0.10),
-            SCNAction.rotateBy(x: -flexX, y: 0, z: -flexZ, duration: 0.20)
+            SCNAction.rotateBy(x: flexX, y: 0, z: flexZ, duration: 0.075),
+            SCNAction.rotateBy(x: -flexX, y: 0, z: -flexZ, duration: 0.18)
         ])
         flex.timingMode = .easeOut
         part.runAction(flex, forKey: "contact-elastic-flex")
         addSurfaceDamage(at: point, normal: normal, scratch: intensity < 0.52 && accumulated < 1.2, on: part)
-        // Structural failure is delayed: components deform and loosen over many hits first.
-        if accumulated >= 5.2, part.parent === deviceRoot, let geometry = part.geometry {
-            let world = part.presentation.worldPosition
-            let rotation = part.presentation.eulerAngles
-            part.removeFromParentNode()
-            scene.rootNode.addChildNode(part)
-            part.position = world
-            part.eulerAngles = rotation
-            let bounds = geometry.boundingBox
-            let volume = abs(bounds.max.x - bounds.min.x) * abs(bounds.max.y - bounds.min.y) * abs(bounds.max.z - bounds.min.z)
-            let body = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: geometry, options: nil))
-            configureDynamicBody(body, mass: min(0.55, max(0.08, volume * 1.8)),
-                                 friction: 0.62, restitution: 0.035, angularDamping: 0.68)
-            part.physicsBody = body
-            let kick = CGFloat.random(in: 0.22...0.48)
-            body.applyForce(SCNVector3(normal.x * kick, max(0.08, normal.y * kick), normal.z * kick), asImpulse: true)
-            detachedDeviceParts.append(part)
-            deviceShellParts.removeAll { $0 === part }
-            breakableComponents.removeAll { $0 === part }
-            playSpatial("device_rattle", at: world, volume: 0.72)
-            statusLabel.stringValue = "A damaged casing component has come loose."
+
+        // First stage: the panel shifts slightly in its mounts and visibly loosens.
+        if previous < 1.0 && accumulated >= 1.0 {
+            part.position = SCNVector3(part.position.x + normal.x * 0.018,
+                                       part.position.y + normal.y * 0.018,
+                                       part.position.z + normal.z * 0.018)
+            let rattle = SCNAction.sequence([
+                SCNAction.rotateBy(x: 0.018, y: 0, z: -0.018, duration: 0.055),
+                SCNAction.rotateBy(x: -0.036, y: 0, z: 0.036, duration: 0.08),
+                SCNAction.rotateBy(x: 0.018, y: 0, z: -0.018, duration: 0.055)
+            ])
+            part.runAction(rattle)
+            statusLabel.stringValue = "Panel mounts are loosening — keep inspecting the damaged area."
+        }
+
+        let identity = (part.name ?? "").lowercased()
+        let isGlass = identity.contains("screen") || identity.contains("glass") || identity.contains("display")
+        let breakThreshold: CGFloat = isGlass ? 1.75 :
+            ((identity.contains("steel") || identity.contains("hinge")) ? 3.8 : 2.45)
+        if accumulated >= breakThreshold, part.parent === deviceRoot {
+            breakDevicePart(part, at: point, normal: normal)
         }
     }
 
@@ -2606,9 +2670,6 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             contact.timingMode = .easeIn
             recover.timingMode = .easeOut
             cursorToolPivot.runAction(SCNAction.sequence([windup, contact, recover]))
-            damageScore += max(1, Int(CGFloat(damageLevel) * toolPower * 10))
-            hitCount += 1
-            scoreLabel?.stringValue = String(format: "SCORE %04d  •  HITS %02d", damageScore, hitCount)
             if selectedTool == "Fire Simulator" {
                 emitFire(on: hit.node, worldPoint: hit.worldCoordinates)
                 playSpatial("fire_roar", at: hit.worldCoordinates, volume: 0.72)
@@ -2749,9 +2810,6 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
     @objc private func resetScene() {
         buildScene()
-        damageScore = 0
-        hitCount = 0
-        scoreLabel?.stringValue = "SCORE 0000  •  HITS 00"
         statusLabel.stringValue = "Scene reset. All simulated damage and props cleared."
     }
 

@@ -11,7 +11,6 @@ mkdir -p "$MACOS" "$RES" "dist/Smash.iconset"
 swift Sources/generate_vfx_textures.swift "$RES"
 swift Sources/generate_window_shards.swift "$RES/window_shards.scn"
 swift Sources/generate_environment_textures.swift "$RES"
-swift Sources/generate_audio.swift "$RES"
 # Optional real recordings override the synthesized placeholders when supplied.
 if [ -d "Assets/Audio" ]; then
     find "Assets/Audio" -maxdepth 1 -type f -name "*.wav" -exec cp {} "$RES/" \;
