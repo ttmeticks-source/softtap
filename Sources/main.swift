@@ -80,12 +80,12 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     }
 
     private func buildWindow() {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 760),
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1360, height: 860),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable],
                           backing: .buffered, defer: false)
         window.title = "Smash Simulator — Demo"
         window.center()
-        window.minSize = NSSize(width: 900, height: 620)
+        window.minSize = NSSize(width: 1080, height: 700)
 
         let root = NSView()
         root.wantsLayer = true
@@ -96,6 +96,16 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         sidebar.translatesAutoresizingMaskIntoConstraints = false
         sidebar.wantsLayer = true
         sidebar.layer?.backgroundColor = NSColor(calibratedRed: 0.085, green: 0.10, blue: 0.14, alpha: 1).cgColor
+        let sidebarGradient = CAGradientLayer()
+        sidebarGradient.colors = [
+            NSColor(calibratedRed: 0.075, green: 0.105, blue: 0.15, alpha: 1).cgColor,
+            NSColor(calibratedRed: 0.035, green: 0.055, blue: 0.085, alpha: 1).cgColor
+        ]
+        sidebarGradient.startPoint = CGPoint(x: 0, y: 1)
+        sidebarGradient.endPoint = CGPoint(x: 1, y: 0)
+        sidebarGradient.frame = NSRect(x: 0, y: 0, width: 278, height: 860)
+        sidebarGradient.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
+        sidebar.layer?.insertSublayer(sidebarGradient, at: 0)
         root.addSubview(sidebar)
 
         let heading = NSTextField(labelWithString: "SMASH SIMULATOR")
@@ -109,7 +119,15 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         subtitle.textColor = NSColor(calibratedWhite: 0.58, alpha: 1)
         subtitle.translatesAutoresizingMaskIntoConstraints = false
         sidebar.addSubview(subtitle)
-
+        let demoBadge = NSTextField(labelWithString: "DEMO")
+        demoBadge.font = .systemFont(ofSize: 9, weight: .black)
+        demoBadge.textColor = .white
+        demoBadge.alignment = .center
+        demoBadge.wantsLayer = true
+        demoBadge.layer?.backgroundColor = NSColor(calibratedRed: 0.10, green: 0.43, blue: 0.58, alpha: 1).cgColor
+        demoBadge.layer?.cornerRadius = 5
+        demoBadge.translatesAutoresizingMaskIntoConstraints = false
+        sidebar.addSubview(demoBadge)
 
         devicePopup = popup(["iPhone", "MacBook", "Desktop PC", "iPad", "TV"], selected: selectedDevice)
         toolPopup = popup(["Hammer", "Rubber Mallet", "Wrench", "Screwdriver", "Flashlight", "Impact Driver", "Plastic Spudger", "Suction Cup"], selected: selectedTool)
@@ -138,6 +156,11 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         statusLabel.font = .systemFont(ofSize: 11)
         statusLabel.textColor = NSColor(calibratedWhite: 0.68, alpha: 1)
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
+        statusLabel.wantsLayer = true
+        statusLabel.layer?.backgroundColor = NSColor(calibratedRed: 0.055, green: 0.085, blue: 0.12, alpha: 1).cgColor
+        statusLabel.layer?.cornerRadius = 9
+        statusLabel.layer?.borderWidth = 1
+        statusLabel.layer?.borderColor = NSColor(calibratedRed: 0.16, green: 0.25, blue: 0.31, alpha: 1).cgColor
         sidebar.addSubview(statusLabel)
 
         sceneView = SmashSceneView()
@@ -159,20 +182,39 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         sceneView.onAim = { [weak self] point in self?.aimTool(at: point) }
         sceneView.onSwing = { [weak self] point in self?.swingTool(at: point) }
         root.addSubview(sceneView)
+        let hud = NSTextField(labelWithString: "LIVE DEMO  •  GRAVITY 9.81 m/s²")
+        hud.font = .systemFont(ofSize: 10, weight: .bold)
+        hud.textColor = NSColor(calibratedRed: 0.76, green: 0.91, blue: 0.96, alpha: 1)
+        hud.alignment = .center
+        hud.wantsLayer = true
+        hud.layer?.backgroundColor = NSColor(calibratedRed: 0.035, green: 0.075, blue: 0.10, alpha: 0.88).cgColor
+        hud.layer?.cornerRadius = 8
+        hud.layer?.borderWidth = 1
+        hud.layer?.borderColor = NSColor(calibratedRed: 0.18, green: 0.42, blue: 0.50, alpha: 1).cgColor
+        hud.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(hud)
 
         NSLayoutConstraint.activate([
             sidebar.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             sidebar.topAnchor.constraint(equalTo: root.topAnchor),
             sidebar.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-            sidebar.widthAnchor.constraint(equalToConstant: 250),
+            sidebar.widthAnchor.constraint(equalToConstant: 278),
             sceneView.leadingAnchor.constraint(equalTo: sidebar.trailingAnchor),
             sceneView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             sceneView.topAnchor.constraint(equalTo: root.topAnchor),
             sceneView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            hud.topAnchor.constraint(equalTo: root.topAnchor, constant: 16),
+            hud.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -18),
+            hud.widthAnchor.constraint(equalToConstant: 220),
+            hud.heightAnchor.constraint(equalToConstant: 28),
             heading.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 20),
             heading.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 25),
             subtitle.leadingAnchor.constraint(equalTo: heading.leadingAnchor),
             subtitle.topAnchor.constraint(equalTo: heading.bottomAnchor, constant: 4),
+            demoBadge.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -20),
+            demoBadge.centerYAnchor.constraint(equalTo: heading.centerYAnchor),
+            demoBadge.widthAnchor.constraint(equalToConstant: 48),
+            demoBadge.heightAnchor.constraint(equalToConstant: 20),
             damageTitle.leadingAnchor.constraint(equalTo: heading.leadingAnchor),
             damageTitle.topAnchor.constraint(equalTo: roomPopup.bottomAnchor, constant: 27),
             damageSlider.leadingAnchor.constraint(equalTo: heading.leadingAnchor),
@@ -230,6 +272,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
     private func popup(_ items: [String], selected: String) -> NSPopUpButton {
         let p = NSPopUpButton()
+        p.bezelStyle = .rounded
+        p.controlSize = .large
+        p.font = .systemFont(ofSize: 12, weight: .medium)
         p.addItems(withTitles: items)
         p.selectItem(withTitle: selected)
         p.translatesAutoresizingMaskIntoConstraints = false
@@ -381,6 +426,10 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         guard impulse > 0.35 else { return }
         let first = contact.nodeA.name ?? "Object"
         let second = contact.nodeB.name ?? "Surface"
+        if impulse > 3.2, let deviceRoot,
+           isInside(contact.nodeA, root: deviceRoot) || isInside(contact.nodeB, root: deviceRoot) {
+            detachNearestDevicePart(at: contact.contactPoint)
+        }
         statusLabel.stringValue = String(
             format: "Scene contact: %@ ↔ %@  ·  impulse %.1f",
             first, second, impulse
