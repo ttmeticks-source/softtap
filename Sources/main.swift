@@ -34,6 +34,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private var cursorTool = SCNNode()
     private var cursorToolPivot = SCNNode()
     private var swingSound: NSSound?
+    private var audioVolume: Float = 0.92
+    private var volumeSlider: NSSlider!
     private var impactSound: NSSound?
     private var glassTapSound: NSSound?
     private var shatterSound: NSSound?
@@ -99,7 +101,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                           backing: .buffered, defer: false)
         window.title = "Smash Simulator — Demo"
         window.center()
-        window.minSize = NSSize(width: 1080, height: 700)
+        window.minSize = NSSize(width: 1120, height: 720)
 
         let root = NSView()
         root.wantsLayer = true
@@ -168,6 +170,14 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         damageSlider = NSSlider(value: Double(damageLevel), minValue: 0.1, maxValue: 1.0, target: self, action: #selector(damageChanged(_:)))
         damageSlider.translatesAutoresizingMaskIntoConstraints = false
         sidebar.addSubview(damageSlider)
+        let audioTitle = NSTextField(labelWithString: "SOUND VOLUME")
+        audioTitle.font = .systemFont(ofSize: 10, weight: .bold)
+        audioTitle.textColor = NSColor(calibratedWhite: 0.72, alpha: 1)
+        audioTitle.translatesAutoresizingMaskIntoConstraints = false
+        sidebar.addSubview(audioTitle)
+        volumeSlider = NSSlider(value: Double(audioVolume), minValue: 0, maxValue: 1, target: self, action: #selector(audioVolumeChanged(_:)))
+        volumeSlider.translatesAutoresizingMaskIntoConstraints = false
+        sidebar.addSubview(volumeSlider)
 
         let hit = makeButton("STRIKE OBJECT", action: #selector(strike))
         let drop = makeButton("DROP FROM HEIGHT", action: #selector(dropObject))
@@ -211,7 +221,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             sidebar.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             sidebar.topAnchor.constraint(equalTo: root.topAnchor),
             sidebar.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-            sidebar.widthAnchor.constraint(equalToConstant: 278),
+            sidebar.widthAnchor.constraint(equalToConstant: 292),
             sceneContainer.leadingAnchor.constraint(equalTo: sidebar.trailingAnchor),
             sceneContainer.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             sceneContainer.topAnchor.constraint(equalTo: root.topAnchor),
@@ -235,7 +245,12 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             damageSlider.topAnchor.constraint(equalTo: damageTitle.bottomAnchor, constant: 8),
             hit.leadingAnchor.constraint(equalTo: heading.leadingAnchor),
             hit.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -20),
-            hit.topAnchor.constraint(equalTo: damageSlider.bottomAnchor, constant: 22),
+            audioTitle.leadingAnchor.constraint(equalTo: heading.leadingAnchor),
+            audioTitle.topAnchor.constraint(equalTo: damageSlider.bottomAnchor, constant: 15),
+            volumeSlider.leadingAnchor.constraint(equalTo: heading.leadingAnchor),
+            volumeSlider.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -20),
+            volumeSlider.topAnchor.constraint(equalTo: audioTitle.bottomAnchor, constant: 6),
+            hit.topAnchor.constraint(equalTo: volumeSlider.bottomAnchor, constant: 16),
             drop.leadingAnchor.constraint(equalTo: hit.leadingAnchor),
             drop.trailingAnchor.constraint(equalTo: hit.trailingAnchor),
             drop.topAnchor.constraint(equalTo: hit.bottomAnchor, constant: 9),
@@ -1729,7 +1744,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         var localNormal = surface.convertVector(normal, from: nil)
         let length = max(0.001, sqrt(localNormal.x * localNormal.x + localNormal.y * localNormal.y + localNormal.z * localNormal.z))
         localNormal = SCNVector3(localNormal.x / length, localNormal.y / length, localNormal.z / length)
-        let size = scratch ? CGFloat.random(in: 0.18...0.38) : CGFloat.random(in: 0.14...0.27)
+        let size = scratch ? CGFloat.random(in: 0.18...0.34) : CGFloat.random(in: 0.36...0.62)
         let plane = SCNPlane(width: size, height: size * CGFloat.random(in: 0.55...1.25))
         let mat = SCNMaterial()
         mat.diffuse.contents = image
@@ -1744,7 +1759,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         mark.look(at: SCNVector3(localPoint.x + localNormal.x, localPoint.y + localNormal.y, localPoint.z + localNormal.z),
                   up: SCNVector3(0, 1, 0), localFront: SCNVector3(0, 0, 1))
         mark.eulerAngles.z += CGFloat.random(in: 0...(2 * .pi))
-        mark.opacity = 0.94
+        mark.opacity = 1.0
         surface.addChildNode(mark)
         surfaceDamageMarks.append(mark)
     }
@@ -1808,11 +1823,11 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         let profile = deformationProfile(for: part)
         // A broad falloff makes the surrounding panel bow and flex with the
         // impact instead of producing an isolated pin-sized indentation.
-        let radius = max(0.14, tangent * 0.62)
+        let radius = max(0.18, tangent * 0.72)
         let yieldedLoad = max(0.04, intensity - profile.yield)
         let retainedLoad = yieldedLoad * (1.0 - profile.springback)
-        let depth = min(0.24, max(0.014, tangent * 0.12)) *
-                    min(2.2, max(0.30, retainedLoad)) * profile.stiffness
+        let depth = min(0.34, max(0.055, tangent * 0.22)) *
+                    min(2.5, max(0.55, retainedLoad * 1.45)) * profile.stiffness
         var vertices = [SCNVector3]()
         vertices.reserveCapacity(source.vectorCount)
         source.data.withUnsafeBytes { raw in
@@ -1928,7 +1943,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         ])
         flex.timingMode = .easeOut
         part.runAction(flex, forKey: "contact-elastic-flex")
-        addSurfaceDamage(at: point, normal: normal, scratch: accumulated < 1.2, on: part)
+        addSurfaceDamage(at: point, normal: normal, scratch: intensity < 0.52 && accumulated < 1.2, on: part)
         // Structural failure is delayed: components deform and loosen over many hits first.
         if accumulated >= 5.2, part.parent === deviceRoot, let geometry = part.geometry {
             let world = part.presentation.worldPosition
@@ -2135,16 +2150,17 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     }
 
     @objc private func damageChanged(_ sender: NSSlider) { damageLevel = Float(sender.floatValue) }
+    @objc private func audioVolumeChanged(_ sender: NSSlider) { audioVolume = Float(sender.floatValue) }
 
     private func playSpatial(_ name: String, at position: SCNVector3, volume: Float = 1.0) {
         let alternate = name + "_alt"
         let chosenName = Bool.random() && Bundle.main.url(forResource: alternate, withExtension: "wav") != nil ? alternate : name
         guard let url = Bundle.main.url(forResource: chosenName, withExtension: "wav"),
               let source = SCNAudioSource(url: url) else { return }
-        source.isPositional = true
+        source.isPositional = false
         source.shouldStream = false
-        source.volume = volume * Float.random(in: 0.84...1.0)
-        source.reverbBlend = Float.random(in: 0.10...0.30)
+        source.volume = audioVolume * volume * Float.random(in: 0.88...1.0)
+        source.reverbBlend = 0.12
         source.load()
         let emitter = SCNNode()
         emitter.position = position
@@ -2175,108 +2191,113 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             screen = candidate.parent
         }
         guard let surface = screen, let geometry = surface.geometry else { return }
-        let localPoint = surface.convertPosition(worldPoint, from: nil)
+        let hitPoint = surface.convertPosition(worldPoint, from: nil)
         var normal = surface.convertVector(worldNormal, from: nil)
-        let length = max(0.001, sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z))
-        normal = SCNVector3(normal.x / length, normal.y / length, normal.z / length)
+        let normalLength = max(0.001, sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z))
+        normal = SCNVector3(normal.x / normalLength, normal.y / normalLength, normal.z / normalLength)
         let bounds = geometry.boundingBox
-        let width = max(0.30, min(1.65, (bounds.max.x - bounds.min.x) * 0.88))
-        let heightAxis = abs(normal.y) > 0.65 ? (bounds.max.z - bounds.min.z) : (bounds.max.y - bounds.min.y)
-        let height = max(0.30, min(1.55, heightAxis * 0.88))
+        let screenWidth = max(0.30, min(2.0, (bounds.max.x - bounds.min.x) * 0.98))
+        let screenHeightAxis = abs(normal.y) > 0.65 ? (bounds.max.z - bounds.min.z) : (bounds.max.y - bounds.min.y)
+        let screenHeight = max(0.30, min(3.0, screenHeightAxis * 0.98))
+        let centerX = (bounds.min.x + bounds.max.x) * 0.5
+        let centerY = (bounds.min.y + bounds.max.y) * 0.5
+        let centerZ = (bounds.min.z + bounds.max.z) * 0.5
+        let impactU = min(1, max(0, (hitPoint.x - bounds.min.x) / max(0.001, bounds.max.x - bounds.min.x)))
+        let impactV: CGFloat
+        if abs(normal.y) > 0.65 {
+            impactV = min(1, max(0, (hitPoint.z - bounds.min.z) / max(0.001, bounds.max.z - bounds.min.z)))
+        } else {
+            impactV = min(1, max(0, (hitPoint.y - bounds.min.y) / max(0.001, bounds.max.y - bounds.min.y)))
+        }
+        let center = NSPoint(x: impactU * 512, y: impactV * 512)
         let image = NSImage(size: NSSize(width: 512, height: 512))
         image.lockFocus()
         NSColor.clear.setFill()
         NSRect(x: 0, y: 0, width: 512, height: 512).fill()
-        let center = NSPoint(x: CGFloat.random(in: 180...330), y: CGFloat.random(in: 180...330))
-        for ray in 0..<16 {
-            let angle = CGFloat(ray) * (.pi * 2 / 16) + CGFloat.random(in: -0.12...0.12)
-            let reach = CGFloat.random(in: 125...245)
+        let isPhone = selectedDevice == "iPhone" || (surface.name ?? "").lowercased().contains("phone")
+        let rgb: [NSColor] = [
+            NSColor(calibratedRed: 1.0, green: 0.025, blue: 0.13, alpha: 0.92),
+            NSColor(calibratedRed: 0.02, green: 0.78, blue: 1.0, alpha: 0.90),
+            NSColor(calibratedRed: 0.72, green: 0.035, blue: 1.0, alpha: 0.88),
+            NSColor(calibratedRed: 0.12, green: 1.0, blue: 0.24, alpha: 0.82)
+        ]
+        if isPhone {
+            let wash = NSBezierPath(rect: NSRect(x: 0, y: 0, width: 512, height: 512))
+            NSColor(calibratedRed: 0.035, green: 0.018, blue: 0.095, alpha: 0.24).setFill()
+            wash.fill()
+            for band in 0..<42 {
+                let y = CGFloat(band) * 12 + CGFloat.random(in: -4...4)
+                let path = NSBezierPath()
+                path.lineWidth = CGFloat.random(in: 4...18)
+                let offset = CGFloat.random(in: -55...55)
+                path.move(to: NSPoint(x: max(0, offset), y: y))
+                path.line(to: NSPoint(x: min(512, 512 + offset), y: y + CGFloat.random(in: -8...8)))
+                rgb[band % rgb.count].withAlphaComponent(CGFloat.random(in: 0.12...0.44)).setStroke()
+                path.stroke()
+            }
+            for streak in 0..<34 {
+                let x = CGFloat.random(in: 0...512)
+                let y = CGFloat.random(in: 0...512)
+                let path = NSBezierPath()
+                path.lineWidth = CGFloat.random(in: 2...13)
+                path.move(to: NSPoint(x: x, y: y))
+                path.line(to: NSPoint(x: min(512, x + CGFloat.random(in: 18...190)),
+                                      y: y + CGFloat.random(in: -12...12)))
+                rgb[streak % rgb.count].withAlphaComponent(CGFloat.random(in: 0.30...0.82)).setStroke()
+                path.stroke()
+            }
+            for patch in 0..<68 {
+                let width = CGFloat.random(in: 5...34)
+                let height = CGFloat.random(in: 4...28)
+                let rect = NSRect(x: CGFloat.random(in: 0...512 - width),
+                                  y: CGFloat.random(in: 0...512 - height),
+                                  width: width, height: height)
+                rgb[patch % rgb.count].withAlphaComponent(CGFloat.random(in: 0.16...0.62)).setFill()
+                NSBezierPath(rect: rect).fill()
+            }
+            for pool in 0..<9 {
+                let radius = CGFloat.random(in: 20...76)
+                let rect = NSRect(x: center.x - radius * CGFloat.random(in: 0.5...1.1),
+                                  y: center.y - radius * CGFloat.random(in: 0.5...1.1),
+                                  width: radius * CGFloat.random(in: 1.1...2.2),
+                                  height: radius * CGFloat.random(in: 0.9...1.8))
+                NSColor(calibratedRed: 0.006, green: 0.009, blue: 0.022,
+                        alpha: CGFloat.random(in: 0.38...0.82)).setFill()
+                NSBezierPath(ovalIn: rect).fill()
+            }
+        }
+        for ray in 0..<24 {
+            let angle = CGFloat(ray) * (.pi * 2 / 24) + CGFloat.random(in: -0.11...0.11)
+            let reach = CGFloat.random(in: 120...310)
             let end = NSPoint(x: center.x + cos(angle) * reach, y: center.y + sin(angle) * reach)
+            let mid = NSPoint(x: center.x + cos(angle) * reach * 0.56 + CGFloat.random(in: -18...18),
+                              y: center.y + sin(angle) * reach * 0.56 + CGFloat.random(in: -18...18))
             let crack = NSBezierPath()
-            crack.lineWidth = CGFloat.random(in: 1.0...2.3)
+            crack.lineWidth = CGFloat.random(in: 1.0...2.4)
             crack.move(to: center)
-            let mid = NSPoint(x: center.x + cos(angle) * reach * 0.55 + CGFloat.random(in: -15...15),
-                              y: center.y + sin(angle) * reach * 0.55 + CGFloat.random(in: -15...15))
             crack.line(to: mid)
             crack.line(to: end)
-            NSColor(calibratedWhite: 0.96, alpha: 0.92).setStroke()
+            NSColor(calibratedWhite: 0.035, alpha: 0.88).setStroke()
             crack.stroke()
+            let glint = NSBezierPath()
+            glint.lineWidth = 0.85
+            glint.move(to: center)
+            glint.line(to: mid)
+            glint.line(to: end)
+            NSColor(calibratedWhite: 0.98, alpha: 0.88).setStroke()
+            glint.stroke()
             if ray % 2 == 0 {
                 let branch = NSBezierPath()
-                branch.lineWidth = 1.0
+                branch.lineWidth = 0.8
                 branch.move(to: mid)
-                branch.line(to: NSPoint(x: mid.x + CGFloat.random(in: -48...48), y: mid.y + CGFloat.random(in: -48...48)))
+                branch.line(to: NSPoint(x: mid.x + CGFloat.random(in: -65...65),
+                                        y: mid.y + CGFloat.random(in: -65...65)))
+                NSColor(calibratedWhite: 0.95, alpha: 0.78).setStroke()
                 branch.stroke()
             }
         }
-        // Simulated LCD/OLED damage: narrow colour-separated streaks beneath the cracks.
-        for index in 0..<7 {
-            let x = center.x + CGFloat(index - 3) * CGFloat.random(in: 5...11)
-            let band = NSBezierPath()
-            band.lineWidth = CGFloat.random(in: 2...7)
-            band.move(to: NSPoint(x: x, y: center.y - 150))
-            band.line(to: NSPoint(x: x + CGFloat.random(in: -10...10), y: center.y + 150))
-            let colors: [NSColor] = [.systemRed, .systemGreen, .systemBlue, .cyan, .magenta]
-            colors[index % colors.count].withAlphaComponent(0.70).setStroke()
-            band.stroke()
-        }
-        // On the iPhone, show a stronger OLED-style failure beneath the glass:
-        // dark ink pooling at the impact point, saturated RGB bleed, and broken pixel rows.
-        // This is a screen-texture effect; the existing glass crack geometry remains separate.
-        if selectedDevice == "iPhone" || (surface.name ?? "").lowercased().contains("phone") {
-            let impactRadius = CGFloat.random(in: 34...58)
-            let ink = NSBezierPath(ovalIn: NSRect(x: center.x - impactRadius,
-                                                   y: center.y - impactRadius * 0.72,
-                                                   width: impactRadius * 2,
-                                                   height: impactRadius * 1.44))
-            NSColor(calibratedRed: 0.012, green: 0.018, blue: 0.035, alpha: 0.88).setFill()
-            ink.fill()
-
-            // Irregular coloured OLED bleed radiates away from the damaged pixels.
-            let bleedColors: [NSColor] = [
-                NSColor(calibratedRed: 1.0, green: 0.035, blue: 0.16, alpha: 0.78),
-                NSColor(calibratedRed: 0.02, green: 0.82, blue: 1.0, alpha: 0.76),
-                NSColor(calibratedRed: 0.62, green: 0.08, blue: 1.0, alpha: 0.72),
-                NSColor(calibratedRed: 0.20, green: 1.0, blue: 0.32, alpha: 0.68)
-            ]
-            for index in 0..<18 {
-                let angle = CGFloat(index) * (.pi * 2 / 18) + CGFloat.random(in: -0.22...0.22)
-                let distance = CGFloat.random(in: 22...142)
-                let blobWidth = CGFloat.random(in: 5...24)
-                let blobHeight = CGFloat.random(in: 12...48)
-                let blob = NSBezierPath(ovalIn: NSRect(
-                    x: center.x + cos(angle) * distance - blobWidth / 2,
-                    y: center.y + sin(angle) * distance - blobHeight / 2,
-                    width: blobWidth, height: blobHeight))
-                bleedColors[index % bleedColors.count].setFill()
-                blob.fill()
-            }
-
-            // Horizontal sub-pixel failures and offset RGB scan bands make the panel
-            // look electrically damaged rather than like a coloured crack decal.
-            for row in 0..<15 {
-                let y = center.y + CGFloat(row - 7) * CGFloat.random(in: 5...13)
-                let x = center.x + CGFloat.random(in: -105...55)
-                let length = CGFloat.random(in: 18...150)
-                let band = NSBezierPath()
-                band.lineWidth = CGFloat.random(in: 2...9)
-                band.move(to: NSPoint(x: x, y: y))
-                band.line(to: NSPoint(x: min(505, x + length), y: y + CGFloat.random(in: -3...3)))
-                bleedColors[row % bleedColors.count].withAlphaComponent(0.82).setStroke()
-                band.stroke()
-            }
-            for block in 0..<34 {
-                let x = center.x + CGFloat.random(in: -155...155)
-                let y = center.y + CGFloat.random(in: -155...155)
-                let pixel = NSRect(x: x, y: y,
-                                   width: CGFloat.random(in: 3...13),
-                                   height: CGFloat.random(in: 3...10))
-                bleedColors[block % bleedColors.count].withAlphaComponent(CGFloat.random(in: 0.38...0.82)).setFill()
-                NSBezierPath(rect: pixel).fill()
-            }
-        }
         image.unlockFocus()
-        let plane = SCNPlane(width: width, height: height)
+        let plane = SCNPlane(width: screenWidth, height: screenHeight)
         let decalMaterial = SCNMaterial()
         decalMaterial.diffuse.contents = image
         decalMaterial.transparent.contents = image
@@ -2286,11 +2307,13 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         plane.firstMaterial = decalMaterial
         let decal = SCNNode(geometry: plane)
         decal.name = "Screen crack overlay"
-        decal.position = SCNVector3(localPoint.x + normal.x * 0.004,
-                                     localPoint.y + normal.y * 0.004,
-                                     localPoint.z + normal.z * 0.004)
+        decal.position = SCNVector3(centerX + normal.x * 0.006,
+                                     centerY + normal.y * 0.006,
+                                     centerZ + normal.z * 0.006)
         let up = abs(normal.y) > 0.85 ? SCNVector3(0, 0, 1) : SCNVector3(0, 1, 0)
-        decal.look(at: SCNVector3(localPoint.x + normal.x, localPoint.y + normal.y, localPoint.z + normal.z),
+        decal.look(at: SCNVector3(decal.position.x + normal.x,
+                                  decal.position.y + normal.y,
+                                  decal.position.z + normal.z),
                    up: up, localFront: SCNVector3(0, 0, 1))
         surface.addChildNode(decal)
     }
@@ -2552,11 +2575,19 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                 playSpatial("water_spray", at: hit.worldCoordinates, volume: 0.82)
             } else {
                 let impact = CGFloat(damageLevel) * toolPower
+                playSpatial("tool_swing", at: hit.worldCoordinates, volume: 0.36)
                 switch selectedTool {
-                case "Sledgehammer": playSpatial("sledgehammer_impact", at: hit.worldCoordinates, volume: 0.95)
+                case "Hammer": playSpatial("hammer_impact", at: hit.worldCoordinates, volume: 0.88)
+                case "Sledgehammer": playSpatial("sledgehammer_impact", at: hit.worldCoordinates, volume: 1.0)
+                case "Rubber Mallet": playSpatial("mallet_impact", at: hit.worldCoordinates, volume: 0.94)
                 case "Crowbar": playSpatial("crowbar_creak", at: hit.worldCoordinates, volume: 0.82)
-                case "Drill": playSpatial("drill_whirr", at: hit.worldCoordinates, volume: 0.72)
+                case "Wrench": playSpatial("wrench_impact", at: hit.worldCoordinates, volume: 0.88)
+                case "Screwdriver": playSpatial("screwdriver_tap", at: hit.worldCoordinates, volume: 0.78)
+                case "Drill": playSpatial("drill_whirr", at: hit.worldCoordinates, volume: 0.78)
                 case "Saw": playSpatial("saw_whine", at: hit.worldCoordinates, volume: 0.78)
+                case "Impact Driver": playSpatial("impact_driver_impact", at: hit.worldCoordinates, volume: 0.94)
+                case "Plastic Spudger": playSpatial("spudger_snap", at: hit.worldCoordinates, volume: 0.76)
+                case "Suction Cup": playSpatial("suction_pop", at: hit.worldCoordinates, volume: 0.80)
                 default: break
                 }
                 let touchesGlass = hasAncestor(named: "Breakable window glass", startingAt: hit.node)
@@ -2578,7 +2609,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                         playSpatial("glass_tap", at: hit.worldCoordinates, volume: 0.92)
                         if impact > 0.55 { playSpatial("glass_crackle", at: hit.worldCoordinates, volume: 0.86) }
                     } else {
-                        playSpatial(impact > 0.9 ? "surface_scratch" : "device_thud", at: hit.worldCoordinates, volume: 0.92)
+                        playSpatial(impact > 0.9 ? "surface_scratch" : "plastic_click", at: hit.worldCoordinates, volume: 0.92)
                     }
                     damageDevicePart(hit.node, at: hit.worldCoordinates, normal: hit.worldNormal, intensity: impact)
                     if impact > 0.45 { playSpatial("device_rattle", at: hit.worldCoordinates, volume: 0.58) }
@@ -2607,7 +2638,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         let up = SCNAction.rotateTo(x: -0.75, y: 0, z: -0.72, duration: 0.22, usesShortestUnitArc: true)
         up.timingMode = .easeInEaseOut
         cursorToolPivot.runAction(.sequence([down, up]))
-        play(swingSound)
+        // Swing and impact are emitted as separate generated audio layers above.
         statusLabel.stringValue = selectedTool == "Fire Simulator" ? "Virtual flame deployed." :
             (selectedTool == "Water Blaster" ? "Water spray deployed." : "Swing: " + selectedTool + " · virtual prop damage.")
     }
