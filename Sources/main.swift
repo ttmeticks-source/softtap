@@ -1257,17 +1257,30 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     }
 
     private func interactiveHit(at point: NSPoint) -> SCNHitTestResult? {
-        sceneView.hitTest(point, options: nil).first { hit in
+        let hits = sceneView.hitTest(point, options: nil).filter { hit in
             var node: SCNNode? = hit.node
             while let current = node {
                 if current.name == "Selection marker" || current.name == "Impact VFX decal" ||
-                    current.name == "Cursor tool" || current.name == "Swing pivot" {
+                    current.name == "Window crack overlay" || current.name == "Cursor tool" ||
+                    current.name == "Swing pivot" {
                     return false
                 }
                 node = current.parent
             }
             return true
         }
+        // Prefer the actual window/device geometry over the grass backdrop or workbench
+        // when the ray crosses more than one visible surface.
+        if !windowHasBroken, let glass = hits.first(where: {
+            hasAncestor(named: "Breakable window glass", startingAt: $0.node) ||
+            $0.node.name?.hasPrefix("Window frame") == true
+        }) {
+            return glass
+        }
+        if let device = deviceRoot, let deviceHit = hits.first(where: { isInside($0.node, root: device) }) {
+            return deviceHit
+        }
+        return hits.first
     }
 
     private func aimTool(at point: NSPoint) {
