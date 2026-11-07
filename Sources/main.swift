@@ -57,6 +57,10 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private var deviceShellParts: [SCNNode] = []
     private var breakableComponents: [SCNNode] = []
     private var detachedDeviceParts: [SCNNode] = []
+    private var deskBreakablePanels: [SCNNode] = []
+    private var deskPanelDamage: [ObjectIdentifier: CGFloat] = [:]
+    private var devicePartDamage: [ObjectIdentifier: CGFloat] = [:]
+    private var surfaceDamageMarks: [SCNNode] = []
     private var showingInternals = false
     private var damageLevel: Float = 0.72
     private var roomStyle = "Studio"
@@ -798,13 +802,20 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             roughness: 0.30
         )
 
-        // One-piece tabletop.
-        addStaticBox(
-            name: "Workbench tabletop",
-            size: SCNVector3(7.6, 0.22, 4.6),
-            position: SCNVector3(0, deskTopY, 0),
-            surface: wood
-        )
+        // Four independent timber panels with visible seams and separate physics bodies.
+        deskBreakablePanels.removeAll()
+        deskPanelDamage.removeAll()
+        for index in 0..<4 {
+            let width: CGFloat = 1.885
+            let x = -2.8575 + CGFloat(index) * 1.905
+            let panel = addStaticBox(
+                name: "Workbench tabletop panel \(index + 1)",
+                size: SCNVector3(width, 0.22, 4.6),
+                position: SCNVector3(x, deskTopY, 0),
+                surface: wood
+            )
+            deskBreakablePanels.append(panel)
+        }
 
         // Four collidable supports, with the top of each leg tucked under the tabletop.
         for x: CGFloat in [-3.35, 3.35] {
@@ -1071,21 +1082,23 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                 addShellBox("Laptop side port", SCNVector3(0.16, 0.055, 0.035), SCNVector3(x, 0.14, -0.35), dark, 0.012)
             }
         case "Desktop PC":
-            root.addChildNode(box(3.0, 1.85, 0.16, metal, SCNVector3(0, 1.25, -0.25)))
-            root.addChildNode(box(2.78, 1.62, 0.035, glass, SCNVector3(0, 1.25, -0.145)))
-            root.addChildNode(box(0.24, 0.85, 0.24, metal, SCNVector3(0, 0.48, -0.25)))
-            root.addChildNode(box(1.25, 0.12, 0.65, metal, SCNVector3(0, 0.12, -0.25)))
-            root.addChildNode(box(0.82, 1.65, 0.8, dark, SCNVector3(2.05, 0.85, 0.1)))
-            root.addChildNode(box(0.68, 1.48, 0.03, glass, SCNVector3(2.05, 0.85, 0.515)))
+            let towerX: CGFloat = 2.52
+            addShellBox("Desktop monitor rear housing", SCNVector3(3.0, 1.85, 0.16), SCNVector3(0, 1.25, -0.25), metal, 0.055)
+            addShellBox("Desktop monitor glass", SCNVector3(2.78, 1.62, 0.035), SCNVector3(0, 1.25, -0.145), glass, 0.035)
+            addShellBox("Desktop monitor stand neck", SCNVector3(0.24, 0.85, 0.24), SCNVector3(0, 0.48, -0.25), metal, 0.035)
+            addShellBox("Desktop monitor stand foot", SCNVector3(1.25, 0.12, 0.65), SCNVector3(0, 0.12, -0.25), metal, 0.035)
+            addShellBox("Desktop tower chassis", SCNVector3(0.82, 1.65, 0.8), SCNVector3(towerX, 0.85, 0.1), dark, 0.065)
+            addShellBox("Desktop tower side glass", SCNVector3(0.68, 1.48, 0.03), SCNVector3(towerX, 0.85, 0.515), glass, 0.035)
+            addShellBox("Desktop tower top panel", SCNVector3(0.76, 0.035, 0.72), SCNVector3(towerX, 1.69, 0.1), metal, 0.018)
             for y: CGFloat in [0.48, 1.12] {
                 let fan = SCNNode(geometry: SCNTorus(ringRadius: 0.17, pipeRadius: 0.022))
                 fan.name = "Desktop case fan ring"
                 fan.geometry?.firstMaterial = metal
-                fan.position = SCNVector3(2.05, y, 0.54)
+                fan.position = SCNVector3(2.52, y, 0.54)
                 addShell(fan)
-                addShellSphere("Desktop fan hub", radius: 0.055, position: SCNVector3(2.05, y, 0.56), surface: dark)
+                addShellSphere("Desktop fan hub", radius: 0.055, position: SCNVector3(2.52, y, 0.56), surface: dark)
             }
-            addShellSphere("Desktop power button", radius: 0.045, position: SCNVector3(2.05, 1.57, 0.55), surface: metal)
+            addShellSphere("Desktop power button", radius: 0.045, position: SCNVector3(2.52, 1.57, 0.55), surface: metal)
             for x: CGFloat in [1.76, 2.34] {
                 for z: CGFloat in [-0.20, 0.40] {
                     addShellBox("Desktop case foot", SCNVector3(0.12, 0.08, 0.12), SCNVector3(x, 0.025, z), dark)
@@ -1253,7 +1266,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             addInternalBox("Phone charging daughterboard", SCNVector3(0.40, 0.035, 0.12), SCNVector3(0, 0.40, 1.00), board)
             addInternalBox("Phone antenna flex", SCNVector3(0.045, 0.018, 0.68), SCNVector3(-0.48, 0.42, 0.10), silver, 0.22)
         }
-        let collisionSize: SCNVector3 = selectedDevice == "MacBook" ? SCNVector3(3.0, 1.94, 2.0) : (selectedDevice == "Desktop PC" ? SCNVector3(3.0, 2.15, 1.0) : (selectedDevice == "iPad" ? SCNVector3(2.3, 0.16, 3.0) : (selectedDevice == "TV" ? SCNVector3(3.84, 2.40, 0.34) : SCNVector3(1.3, 0.205, 2.5))))
+        let collisionSize: SCNVector3 = selectedDevice == "MacBook" ? SCNVector3(3.0, 1.94, 2.0) : (selectedDevice == "Desktop PC" ? SCNVector3(5.15, 2.15, 1.0) : (selectedDevice == "iPad" ? SCNVector3(2.3, 0.16, 3.0) : (selectedDevice == "TV" ? SCNVector3(3.84, 2.40, 0.34) : SCNVector3(1.3, 0.205, 2.5))))
         let modelCenterY: CGFloat
         switch selectedDevice {
         case "MacBook": modelCenterY = 1.0825
