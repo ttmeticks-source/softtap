@@ -534,7 +534,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         } else if isScratch {
             names = (1...6).map { String(format: "scratch_%02d", $0) }
         } else {
-            names = (1...8).map { String(format: "crack_%02d", $0) }
+            names = (1...6).map { String(format: "dent_%02d", $0) }
         }
         guard let name = names.randomElement(),
               let url = Bundle.main.url(forResource: name, withExtension: "png") else { return }

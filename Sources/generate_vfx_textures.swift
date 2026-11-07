@@ -86,6 +86,38 @@ func renderScuff(_ name: String, seed: Int) throws {
     try png.write(to: URL(fileURLWithPath: output).appendingPathComponent(name + ".png"))
 }
 
+func renderDent(_ name: String, seed: Int) throws {
+    let size = 512
+    let image = NSImage(size: NSSize(width: size, height: size))
+    image.lockFocus()
+    NSColor.clear.setFill()
+    NSBezierPath(rect: NSRect(x: 0, y: 0, width: size, height: size)).fill()
+    let offsetX = CGFloat((seed * 37) % 44 - 22)
+    let offsetY = CGFloat((seed * 61) % 38 - 19)
+    let width = CGFloat(150 + (seed * 29) % 95)
+    let height = CGFloat(95 + (seed * 17) % 75)
+    let oval = NSRect(x: 256 - width / 2 + offsetX, y: 256 - height / 2 + offsetY, width: width, height: height)
+    NSColor(calibratedWhite: 0.035, alpha: 0.25).setFill()
+    NSBezierPath(ovalIn: oval.insetBy(dx: -9, dy: -6)).fill()
+    let rim = NSBezierPath(ovalIn: oval)
+    rim.lineWidth = 13
+    NSColor(calibratedWhite: 0.035, alpha: 0.76).setStroke()
+    rim.stroke()
+    let highlight = NSBezierPath(ovalIn: oval.insetBy(dx: 7, dy: 6))
+    highlight.lineWidth = 3.2
+    NSColor(calibratedWhite: 0.96, alpha: 0.50).setStroke()
+    highlight.stroke()
+    let center = NSBezierPath(ovalIn: oval.insetBy(dx: 20, dy: 15))
+    NSColor(calibratedWhite: 0.12, alpha: 0.24).setFill()
+    center.fill()
+    image.unlockFocus()
+    guard let data = image.tiffRepresentation,
+          let bitmap = NSBitmapImageRep(data: data),
+          let png = bitmap.representation(using: .png, properties: [:]) else { return }
+    try png.write(to: URL(fileURLWithPath: output).appendingPathComponent(name + ".png"))
+}
+
 for index in 1...8 { try render(String(format: "crack_%02d", index), scratch: false, seed: index) }
 for index in 1...6 { try render(String(format: "scratch_%02d", index), scratch: true, seed: index) }
 for index in 1...4 { try render(String(format: "scuff_%02d", index), scratch: false, seed: index + 12) }
+for index in 1...6 { try renderDent(String(format: "dent_%02d", index), seed: index + 30) }
