@@ -382,7 +382,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             first, second, impulse
         )
         playSurfaceImpact(first: first, second: second, impulse: impulse)
-        addImpactDecal(at: contact.contactPoint, normal: contact.contactNormal, impulse: impulse)
+        addImpactDecal(at: contact.contactPoint, normal: contact.contactNormal, impulse: impulse, surfaceName: first + " " + second)
         let touchesWindow = contact.nodeA.name == "Breakable window glass" || contact.nodeB.name == "Breakable window glass"
         if touchesWindow && impulse >= windowBreakThreshold {
             breakWindow(at: contact.contactPoint)
@@ -515,11 +515,23 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     }
 
     // Cosmetic texture-plane overlays only; no material damage model is used.
-    private func addImpactDecal(at point: SCNVector3, normal: SCNVector3, impulse: CGFloat) {
-        let isScratch = impulse > 4.2
-        let names = isScratch
-            ? (1...6).map { String(format: "scratch_%02d", $0) }
-            : (1...8).map { String(format: "crack_%02d", $0) }
+    private func addImpactDecal(at point: SCNVector3, normal: SCNVector3, impulse: CGFloat, surfaceName: String) {
+        let surface = surfaceName.lowercased()
+        let isGlass = surface.contains("glass") || surface.contains("window")
+        let isSoft = surface.contains("floor") || surface.contains("carpet")
+        let isScratch = !isGlass && !isSoft &&
+            (impulse > 4.2 || surface.contains("wood") || surface.contains("desk") ||
+             surface.contains("workbench") || surface.contains("metal") || surface.contains("frame"))
+        let names: [String]
+        if isGlass {
+            names = (1...8).map { String(format: "crack_%02d", $0) }
+        } else if isSoft {
+            names = (1...4).map { String(format: "scuff_%02d", $0) }
+        } else if isScratch {
+            names = (1...6).map { String(format: "scratch_%02d", $0) }
+        } else {
+            names = (1...8).map { String(format: "crack_%02d", $0) }
+        }
         guard let name = names.randomElement(),
               let url = Bundle.main.url(forResource: name, withExtension: "png") else { return }
         if impactDecals.count >= maximumImpactDecals {
@@ -1308,7 +1320,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                 }
             } else if let device = deviceRoot, isInside(hit.node, root: device) {
                 let power = CGFloat(5 + damageLevel * 18)
-                addImpactDecal(at: hit.worldCoordinates, normal: hit.worldNormal, impulse: CGFloat(damageLevel) * 5)
+                addImpactDecal(at: hit.worldCoordinates, normal: hit.worldNormal, impulse: CGFloat(damageLevel) * 5, surfaceName: hit.node.name ?? "Device")
                 let strikeImpulse = CGFloat(damageLevel) * 5
                 if strikeImpulse > 4.2 { play(scratchSound) } else { play(deviceThudSound) }
                 if damageLevel > 0.45 { play(deviceRattleSound) }

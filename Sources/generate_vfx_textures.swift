@@ -57,5 +57,35 @@ func render(_ name: String, scratch: Bool, seed: Int) throws {
     try png.write(to: URL(fileURLWithPath: output).appendingPathComponent(name + ".png"))
 }
 
+func renderScuff(_ name: String, seed: Int) throws {
+    let size = 512
+    let image = NSImage(size: NSSize(width: size, height: size))
+    image.lockFocus()
+    NSColor.clear.setFill()
+    NSBezierPath(rect: NSRect(x: 0, y: 0, width: size, height: size)).fill()
+    for mark in 0..<9 {
+        let x = CGFloat(55 + (seed * 31 + mark * 47) % 390)
+        let y = CGFloat(45 + (seed * 53 + mark * 61) % 410)
+        let path = NSBezierPath()
+        path.lineCapStyle = .round
+        path.move(to: NSPoint(x: x, y: y))
+        path.curve(to: NSPoint(x: x + 35 + CGFloat(mark * 7), y: y + CGFloat(mark % 3 - 1) * 13),
+                   controlPoint1: NSPoint(x: x + 12, y: y - 5),
+                   controlPoint2: NSPoint(x: x + 24, y: y + 7))
+        path.lineWidth = CGFloat(5 + mark % 4)
+        NSColor(calibratedWhite: 0.10, alpha: 0.30).setStroke()
+        path.stroke()
+        path.lineWidth = 1.4
+        NSColor(calibratedWhite: 0.78, alpha: 0.22).setStroke()
+        path.stroke()
+    }
+    image.unlockFocus()
+    guard let data = image.tiffRepresentation,
+          let bitmap = NSBitmapImageRep(data: data),
+          let png = bitmap.representation(using: .png, properties: [:]) else { return }
+    try png.write(to: URL(fileURLWithPath: output).appendingPathComponent(name + ".png"))
+}
+
 for index in 1...8 { try render(String(format: "crack_%02d", index), scratch: false, seed: index) }
 for index in 1...6 { try render(String(format: "scratch_%02d", index), scratch: true, seed: index) }
+for index in 1...4 { try render(String(format: "scuff_%02d", index), scratch: false, seed: index + 12) }
