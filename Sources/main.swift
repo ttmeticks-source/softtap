@@ -33,6 +33,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private var cursorToolPivot = SCNNode()
     private var swingSound: NSSound?
     private var impactSound: NSSound?
+    private var impactDecals: [SCNNode] = []
+    private let maximumImpactDecals = 40
     private var damageLevel: Float = 0.72
     private var roomStyle = "Studio"
     private var statusLabel: NSTextField!
@@ -341,6 +343,46 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             first, second, impulse
         )
         play(impactSound)
+        addImpactDecal(at: contact.contactPoint, normal: contact.contactNormal, impulse: impulse)
+    }
+
+    // Cosmetic texture-plane overlays only; no material damage model is used.
+    private func addImpactDecal(at point: SCNVector3, normal: SCNVector3, impulse: CGFloat) {
+        let isScratch = impulse > 3.0
+        let names = isScratch
+            ? (1...6).map { String(format: "scratch_%02d", $0) }
+            : (1...8).map { String(format: "crack_%02d", $0) }
+        guard let name = names.randomElement(),
+              let url = Bundle.main.url(forResource: name, withExtension: "png") else { return }
+        if impactDecals.count >= maximumImpactDecals {
+            let oldest = impactDecals.removeFirst()
+            oldest.removeFromParentNode()
+        }
+        let width = CGFloat.random(in: 0.16...0.34)
+        let plane = SCNPlane(width: width, height: width * CGFloat.random(in: 0.72...1.28))
+        let material = SCNMaterial()
+        material.diffuse.contents = NSImage(contentsOf: url)
+        material.transparent.contents = NSImage(contentsOf: url)
+        material.isDoubleSided = true
+        material.lightingModel = .constant
+        material.blendMode = .alpha
+        plane.firstMaterial = material
+        let decal = SCNNode(geometry: plane)
+        decal.name = "Impact VFX decal"
+        decal.position = SCNVector3(point.x + normal.x * 0.006,
+                                    point.y + normal.y * 0.006,
+                                    point.z + normal.z * 0.006)
+        let target = SCNVector3(point.x + normal.x, point.y + normal.y, point.z + normal.z)
+        decal.look(at: target, up: scene.rootNode.worldUp, localFront: SCNVector3(0, 0, 1))
+        decal.eulerAngles.z += Float.random(in: 0...(2 * .pi))
+        decal.opacity = 0.92
+        scene.rootNode.addChildNode(decal)
+        impactDecals.append(decal)
+        decal.runAction(.sequence([.wait(duration: 7.2), .fadeOut(duration: 0.8), .removeFromParentNode()]))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8.1) { [weak self, weak decal] in
+            guard let self, let decal else { return }
+            self.impactDecals.removeAll { $0 === decal }
+        }
     }
 
     private func addStaticBox(
