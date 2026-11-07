@@ -2299,7 +2299,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         let world = block.presentation.worldPosition
         let bounds = geometry.boundingBox
         let size = SCNVector3(bounds.max.x - bounds.min.x, bounds.max.y - bounds.min.y, bounds.max.z - bounds.min.z)
-        let fragmentMaterial = geometry.firstMaterial ?? material(.gray, roughness: 0.72)
+        let fragmentMaterial = geometry.firstMaterial ?? self.material(.gray, roughness: 0.72)
         block.removeFromParentNode()
         let fragmentSize = SCNVector3(size.x * 0.48, size.y * 0.48, size.z * 0.48)
         for index in 0..<4 {
