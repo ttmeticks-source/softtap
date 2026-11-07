@@ -143,8 +143,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         sceneView.scene = scene
         sceneView.backgroundColor = NSColor(calibratedRed: 0.055, green: 0.075, blue: 0.11, alpha: 1)
         sceneView.allowsCameraControl = true
-        sceneView.autoenablesDefaultLighting = true
+        sceneView.autoenablesDefaultLighting = false
         sceneView.antialiasingMode = .multisampling4X
+        sceneView.preferredFramesPerSecond = 60
         sceneView.delegate = self
         sceneView.defaultCameraController.interactionMode = .orbitTurntable
         sceneView.defaultCameraController.automaticTarget = false
@@ -267,6 +268,13 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
         let camera = SCNNode()
         camera.camera = SCNCamera()
+        camera.camera?.wantsHDR = true
+        camera.camera?.wantsExposureAdaptation = true
+        camera.camera?.bloomIntensity = 0.10
+        camera.camera?.bloomThreshold = 1.25
+        camera.camera?.vignettingIntensity = 0.22
+        camera.camera?.screenSpaceAmbientOcclusionIntensity = 0.62
+        camera.camera?.screenSpaceAmbientOcclusionRadius = 7.0
         camera.position = SCNVector3(0, 3.8, 7.2)
         camera.look(at: SCNVector3(0, 1.30, 0))
         camera.camera?.zNear = 0.1
@@ -279,6 +287,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         scene.fogStartDistance = 12
         scene.fogEndDistance = 30
         scene.fogDensityExponent = 1.25
+        scene.lightingEnvironment.contents = NSColor(calibratedRed: 0.22, green: 0.27, blue: 0.31, alpha: 1)
+        scene.lightingEnvironment.intensity = 0.38
         let ambient = SCNNode()
         ambient.light = SCNLight()
         ambient.light?.type = .ambient
@@ -316,6 +326,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         scene.rootNode.addChildNode(rim)
 
         makeRoom()
+        makeRoomDressing()
         makeDesk()
         makeDevice()
         makePhysicsProps()
@@ -328,7 +339,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     // stability for the existing dynamic device and props while keeping all physics
     // local to this scene. Contact callbacks are informational only.
     private func configurePhysicsWorld() {
-        scene.physicsWorld.gravity = SCNVector3(0, -9.8, 0)
+        scene.physicsWorld.gravity = SCNVector3(0, -9.81, 0)
         scene.physicsWorld.speed = 1.0
         // A fixed 120 Hz step reduces tunnelling and jitter for the existing SceneKit bodies.
         scene.physicsWorld.timeStep = 1.0 / 120.0
@@ -642,17 +653,135 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             scene.rootNode.addChildNode(carpet)
         }
 
-        if let grassURL = Bundle.main.url(forResource: "grass_outside", withExtension: "png"),
-           let grassImage = NSImage(contentsOf: grassURL) {
-            let grassMaterial = SCNMaterial()
-            grassMaterial.diffuse.contents = grassImage
-            grassMaterial.lightingModel = .constant
-            let field = SCNNode(geometry: SCNPlane(width: 16, height: 7))
-            field.name = "Grass field outside window"
-            field.geometry?.firstMaterial = grassMaterial
-            field.position = SCNVector3(0, 2.55, -9.04)
-            scene.rootNode.addChildNode(field)
+        makeGrassField()
+    }
+
+    private func makeGrassField() {
+        let groundMaterial = material(NSColor(calibratedRed: 0.105, green: 0.25, blue: 0.075, alpha: 1), roughness: 0.98)
+        if let texture = Bundle.main.url(forResource: "grass_outside", withExtension: "png") {
+            groundMaterial.diffuse.contents = NSImage(contentsOf: texture)
+            groundMaterial.diffuse.wrapS = .repeat
+            groundMaterial.diffuse.wrapT = .repeat
+            groundMaterial.diffuse.contentsTransform = SCNMatrix4MakeScale(4, 4, 1)
         }
+        let ground = SCNNode(geometry: SCNPlane(width: 28, height: 24))
+        ground.name = "Outdoor grass ground"
+        ground.geometry?.firstMaterial = groundMaterial
+        ground.eulerAngles.x = -.pi / 2
+        ground.position = SCNVector3(0, -0.20, -18.5)
+        scene.rootNode.addChildNode(ground)
+        let colors = [
+            NSColor(calibratedRed: 0.12, green: 0.34, blue: 0.075, alpha: 1),
+            NSColor(calibratedRed: 0.19, green: 0.43, blue: 0.09, alpha: 1),
+            NSColor(calibratedRed: 0.25, green: 0.39, blue: 0.08, alpha: 1),
+            NSColor(calibratedRed: 0.10, green: 0.27, blue: 0.055, alpha: 1)
+        ]
+        let blades = colors.map { color -> SCNGeometry in
+            let cone = SCNCone(topRadius: 0.0015, bottomRadius: 0.012, height: 0.28)
+            cone.radialSegmentCount = 4
+            cone.firstMaterial = material(color, roughness: 0.98)
+            return cone
+        }
+        func sample(_ index: Int) -> CGFloat {
+            let value = (index &* 1664525 &+ 1013904223) & 0x7fffffff
+            return CGFloat(value % 10000) / 10000
+        }
+        for tuft in 0..<160 {
+            let x = -10.0 + sample(tuft * 7 + 3) * 20.0
+            let z = -10.0 - sample(tuft * 11 + 5) * 17.0
+            let count = 2 + Int(sample(tuft * 13 + 9) * 2)
+            for bladeIndex in 0..<count {
+                let blade = SCNNode(geometry: blades[(tuft + bladeIndex) % blades.count])
+                let height = 0.16 + sample(tuft * 19 + bladeIndex * 23 + 1) * 0.26
+                blade.scale = SCNVector3(1, height / 0.28, 1)
+                blade.position = SCNVector3(x + (sample(tuft * 29 + bladeIndex) - 0.5) * 0.12,
+                                            height * 0.5 - 0.19,
+                                            z + (sample(tuft * 31 + bladeIndex * 3) - 0.5) * 0.12)
+                blade.eulerAngles = SCNVector3(0, sample(tuft * 37 + bladeIndex) * .pi,
+                                               (sample(tuft * 41 + bladeIndex) - 0.5) * 0.55)
+                scene.rootNode.addChildNode(blade)
+            }
+        }
+        for index in 0..<5 {
+            let mound = SCNSphere(radius: 1)
+            mound.firstMaterial = material(colors[index % colors.count], roughness: 1)
+            let node = SCNNode(geometry: mound)
+            node.name = "Distant grassy mound"
+            node.scale = SCNVector3(2.6 + CGFloat(index % 2), 0.22, 0.65)
+            node.position = SCNVector3(-8 + CGFloat(index) * 4, -0.18, -27 + CGFloat(index % 2) * 1.2)
+            scene.rootNode.addChildNode(node)
+        }
+    }
+
+    private func makeRoomDressing() {
+        let trim = material(NSColor(calibratedRed: 0.10, green: 0.12, blue: 0.14, alpha: 1), roughness: 0.55)
+        let cabinet = material(NSColor(calibratedRed: 0.22, green: 0.25, blue: 0.27, alpha: 1), roughness: 0.74)
+        let accent = material(NSColor(calibratedRed: 0.12, green: 0.40, blue: 0.48, alpha: 1), roughness: 0.42)
+        addStaticBox(name: "Front wall baseboard", size: SCNVector3(19.7, 0.16, 0.10), position: SCNVector3(0, 0.10, 8.76), surface: trim)
+        addStaticBox(name: "Left wall baseboard", size: SCNVector3(0.10, 0.16, 17.7), position: SCNVector3(-9.76, 0.10, 0), surface: trim)
+        addStaticBox(name: "Right wall baseboard", size: SCNVector3(0.10, 0.16, 17.7), position: SCNVector3(9.76, 0.10, 0), surface: trim)
+        addStaticBox(name: "Storage cabinet carcass", size: SCNVector3(1.75, 2.10, 0.72), position: SCNVector3(-7.75, 1.05, -5.65), surface: cabinet)
+        for x: CGFloat in [-8.18, -7.32] {
+            addStaticBox(name: "Storage cabinet door", size: SCNVector3(0.82, 1.98, 0.045), position: SCNVector3(x, 1.05, -5.265), surface: trim)
+            let knob = SCNNode(geometry: SCNSphere(radius: 0.045))
+            knob.name = "Cabinet knob"
+            knob.geometry?.firstMaterial = accent
+            knob.position = SCNVector3(x + (x < -7.7 ? 0.30 : -0.30), 1.05, -5.21)
+            scene.rootNode.addChildNode(knob)
+        }
+        for level in 0..<2 {
+            addStaticBox(name: "Wall storage shelf", size: SCNVector3(0.62, 0.12, 4.25),
+                         position: SCNVector3(-9.48, 3.15 + CGFloat(level) * 1.05, -1.65), surface: cabinet)
+            for item in 0..<4 {
+                let bin = SCNNode(geometry: SCNBox(width: 0.34, height: 0.26, length: 0.42, chamferRadius: 0.025))
+                bin.name = "Storage bin"
+                bin.geometry?.firstMaterial = storageBinMaterial(item)
+                bin.position = SCNVector3(-9.42, 3.34 + CGFloat(level) * 1.05, -3.15 + CGFloat(item) * 0.98)
+                scene.rootNode.addChildNode(bin)
+            }
+        }
+        addStaticBox(name: "Workshop pegboard", size: SCNVector3(0.08, 2.65, 4.15),
+                     position: SCNVector3(9.72, 3.65, -1.45), surface: cabinet)
+        for row in 0..<10 {
+            for col in 0..<13 {
+                let hole = SCNNode(geometry: SCNSphere(radius: 0.018))
+                hole.geometry?.firstMaterial = trim
+                hole.position = SCNVector3(9.665, 2.55 + CGFloat(row) * 0.23, -3.35 + CGFloat(col) * 0.32)
+                scene.rootNode.addChildNode(hole)
+            }
+        }
+        for index in 0..<5 {
+            let hook = SCNNode(geometry: SCNTorus(ringRadius: 0.09, pipeRadius: 0.018))
+            hook.name = "Workshop peg hook"
+            hook.geometry?.firstMaterial = accent
+            hook.position = SCNVector3(9.60, 3.25 + CGFloat(index % 2) * 0.48, -2.75 + CGFloat(index) * 0.70)
+            hook.eulerAngles.y = .pi / 2
+            scene.rootNode.addChildNode(hook)
+        }
+        let diffuser = SCNNode(geometry: SCNBox(width: 3.6, height: 0.06, length: 1.25, chamferRadius: 0.08))
+        diffuser.name = "Ceiling LED diffuser"
+        let diffuserMaterial = material(NSColor(calibratedRed: 0.82, green: 0.88, blue: 0.92, alpha: 1), roughness: 0.18)
+        diffuserMaterial.emission.contents = NSColor(calibratedRed: 0.58, green: 0.72, blue: 0.82, alpha: 1)
+        diffuser.geometry?.firstMaterial = diffuserMaterial
+        diffuser.position = SCNVector3(0, 6.92, 0)
+        scene.rootNode.addChildNode(diffuser)
+        let practical = SCNNode()
+        practical.light = SCNLight()
+        practical.light?.type = .area
+        practical.light?.intensity = 520
+        practical.light?.areaSize = CGSize(width: 3.4, height: 1.1)
+        practical.position = SCNVector3(0, 6.75, 0)
+        scene.rootNode.addChildNode(practical)
+    }
+
+    private func storageBinMaterial(_ index: Int) -> SCNMaterial {
+        let colors = [
+            NSColor(calibratedRed: 0.28, green: 0.37, blue: 0.42, alpha: 1),
+            NSColor(calibratedRed: 0.46, green: 0.32, blue: 0.18, alpha: 1),
+            NSColor(calibratedRed: 0.20, green: 0.31, blue: 0.25, alpha: 1),
+            NSColor(calibratedRed: 0.38, green: 0.39, blue: 0.42, alpha: 1)
+        ]
+        return material(colors[index % colors.count], roughness: 0.72)
     }
 
     private func makeDesk() {
@@ -858,8 +987,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private func material(_ color: NSColor, roughness: CGFloat) -> SCNMaterial {
         let m = SCNMaterial()
         m.diffuse.contents = color
+        m.lightingModel = .physicallyBased
         m.roughness.contents = roughness
-        m.metalness.contents = 0.12
+        m.metalness.contents = roughness < 0.34 ? 0.28 : 0.045
         return m
     }
 
