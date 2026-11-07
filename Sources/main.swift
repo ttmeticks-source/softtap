@@ -264,6 +264,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         p.bezelStyle = .rounded
         p.controlSize = .large
         p.font = .systemFont(ofSize: 12, weight: .medium)
+        p.wantsLayer = true
+        p.layer?.cornerRadius = 7
         p.addItems(withTitles: items)
         p.selectItem(withTitle: selected)
         p.translatesAutoresizingMaskIntoConstraints = false
@@ -289,11 +291,17 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private func makeButton(_ title: String, action: Selector) -> NSButton {
         let b = NSButton(title: title, target: self, action: action)
         b.bezelStyle = .rounded
-        b.bezelColor = NSColor(calibratedRed: 0.10, green: 0.34, blue: 0.48, alpha: 1)
-        b.contentTintColor = .white
-        b.font = .systemFont(ofSize: 11, weight: .bold)
+        b.isBordered = false
+        b.wantsLayer = true
+        b.layer?.backgroundColor = NSColor(calibratedRed: 0.105, green: 0.31, blue: 0.43, alpha: 1).cgColor
+        b.layer?.cornerRadius = 8
+        b.layer?.borderWidth = 1
+        b.layer?.borderColor = NSColor(calibratedRed: 0.23, green: 0.48, blue: 0.59, alpha: 1).cgColor
+        b.contentTintColor = NSColor(calibratedRed: 0.91, green: 0.97, blue: 1, alpha: 1)
+        b.font = .systemFont(ofSize: 11, weight: .semibold)
+        b.controlSize = .large
         b.translatesAutoresizingMaskIntoConstraints = false
-        b.heightAnchor.constraint(equalToConstant: 34).isActive = true
+        b.heightAnchor.constraint(equalToConstant: 36).isActive = true
         return b
     }
 
@@ -569,10 +577,15 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     }
 
     // Large, staged glass overlays make the first tool strike visibly register before the setpiece swap.
-    private func addWindowCrack(at point: SCNVector3, normal: SCNVector3, stage: Int) {
+    // Crack art is parented to the glass and positioned in glass-local coordinates.
+    private func addWindowCrack(at point: SCNVector3, normal: SCNVector3, stage: Int, on glass: SCNNode) {
         guard let name = (1...8).map({ String(format: "crack_%02d", $0) }).randomElement(),
               let url = Bundle.main.url(forResource: name, withExtension: "png"),
               let image = NSImage(contentsOf: url) else { return }
+        let localPoint = glass.convertPosition(point, from: nil)
+        var localNormal = glass.convertVector(normal, from: nil)
+        let length = max(0.001, sqrt(localNormal.x * localNormal.x + localNormal.y * localNormal.y + localNormal.z * localNormal.z))
+        localNormal = SCNVector3(localNormal.x / length, localNormal.y / length, localNormal.z / length)
         let width: CGFloat = stage == 1 ? 0.92 : 1.28
         let plane = SCNPlane(width: width, height: width * 0.92)
         let material = SCNMaterial()
@@ -584,14 +597,14 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         plane.firstMaterial = material
         let decal = SCNNode(geometry: plane)
         decal.name = "Window crack overlay"
-        decal.position = SCNVector3(point.x + normal.x * 0.032,
-                                    point.y + normal.y * 0.032,
-                                    point.z + normal.z * 0.032)
-        let target = SCNVector3(point.x + normal.x, point.y + normal.y, point.z + normal.z)
-        decal.look(at: target, up: scene.rootNode.worldUp, localFront: SCNVector3(0, 0, 1))
+        decal.position = SCNVector3(localPoint.x + localNormal.x * 0.012,
+                                    localPoint.y + localNormal.y * 0.012,
+                                    localPoint.z + localNormal.z * 0.012)
+        decal.look(at: SCNVector3(localPoint.x + localNormal.x, localPoint.y + localNormal.y, localPoint.z + localNormal.z),
+                  up: SCNVector3(0, 1, 0), localFront: SCNVector3(0, 0, 1))
         decal.eulerAngles.z += CGFloat.random(in: 0...(2 * .pi))
         decal.opacity = 1
-        scene.rootNode.addChildNode(decal)
+        glass.addChildNode(decal)
         windowCrackDecals.append(decal)
     }
 
@@ -1024,6 +1037,13 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             node.name = name
             addShell(node)
         }
+        @discardableResult
+        func addShellBoxNode(_ name: String, _ size: SCNVector3, _ pos: SCNVector3, _ surface: SCNMaterial, _ chamfer: CGFloat = 0.02) -> SCNNode {
+            let node = box(size.x, size.y, size.z, surface, pos, chamfer)
+            node.name = name
+            addShell(node)
+            return node
+        }
         func addShellCylinder(_ name: String, radius: CGFloat, height: CGFloat, position: SCNVector3, surface: SCNMaterial) {
             let geometry = SCNCylinder(radius: radius, height: height)
             geometry.firstMaterial = surface
@@ -1090,6 +1110,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             addShellBox("Desktop monitor glass", SCNVector3(2.78, 1.62, 0.035), SCNVector3(0, 1.25, -0.145), glass, 0.035)
             addShellBox("Desktop monitor stand neck", SCNVector3(0.24, 0.85, 0.24), SCNVector3(0, 0.48, -0.25), metal, 0.035)
             addShellBox("Desktop monitor stand foot", SCNVector3(1.25, 0.12, 0.65), SCNVector3(0, 0.12, -0.25), metal, 0.035)
+            addShellBox("Monitor lower bezel control strip", SCNVector3(1.20, 0.035, 0.025), SCNVector3(0, 0.43, -0.12), dark, 0.012)
+            for index in 0..<5 { addShellSphere("Monitor OSD button", radius: 0.018, position: SCNVector3(0.72 + CGFloat(index) * 0.075, 0.43, -0.105), surface: metal) }
+            addShellSphere("Monitor status indicator", radius: 0.012, position: SCNVector3(-0.82, 0.43, -0.105), surface: metal)
             addShellBox("Desktop tower chassis", SCNVector3(0.82, 1.65, 0.8), SCNVector3(towerX, 0.85, 0.1), dark, 0.065)
             addShellBox("Desktop tower side glass", SCNVector3(0.68, 1.48, 0.03), SCNVector3(towerX, 0.85, 0.515), glass, 0.035)
             addShellBox("Desktop tower top panel", SCNVector3(0.76, 0.035, 0.72), SCNVector3(towerX, 1.69, 0.1), metal, 0.018)
@@ -1097,9 +1120,14 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                 let fan = SCNNode(geometry: SCNTorus(ringRadius: 0.17, pipeRadius: 0.022))
                 fan.name = "Desktop case fan ring"
                 fan.geometry?.firstMaterial = metal
-                fan.position = SCNVector3(2.52, y, 0.54)
+                fan.position = SCNVector3(towerX, y, 0.54)
                 addShell(fan)
-                addShellSphere("Desktop fan hub", radius: 0.055, position: SCNVector3(2.52, y, 0.56), surface: dark)
+                addShellSphere("Desktop fan hub", radius: 0.055, position: SCNVector3(towerX, y, 0.56), surface: dark)
+                for blade in 0..<7 {
+                    let angle = CGFloat(blade) * (.pi * 2 / 7)
+                    let vane = addShellBoxNode("Desktop fan blade", SCNVector3(0.025, 0.12, 0.012), SCNVector3(towerX + cos(angle) * 0.085, y + sin(angle) * 0.085, 0.555), metal, 0.008)
+                    vane.eulerAngles.z = angle
+                }
             }
             addShellSphere("Desktop power button", radius: 0.045, position: SCNVector3(2.52, 1.57, 0.55), surface: metal)
             for x: CGFloat in [1.76, 2.34] {
@@ -1395,15 +1423,18 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         part.runAction(flex, forKey: "device-flex")
     }
 
-    private func addSurfaceDamage(at point: SCNVector3, normal: SCNVector3, scratch: Bool) {
+    // Marks are attached to the struck component, not left behind in world space.
+    private func addSurfaceDamage(at point: SCNVector3, normal: SCNVector3, scratch: Bool, on surface: SCNNode) {
         let prefix = scratch ? "scratch" : "dent"
         let names = (1...6).map { String(format: "%@_%02d", prefix, $0) }
         guard let name = names.randomElement(),
               let url = Bundle.main.url(forResource: name, withExtension: "png"),
               let image = NSImage(contentsOf: url) else { return }
-        if surfaceDamageMarks.count >= 48 {
-            surfaceDamageMarks.removeFirst().removeFromParentNode()
-        }
+        if surfaceDamageMarks.count >= 48 { surfaceDamageMarks.removeFirst().removeFromParentNode() }
+        let localPoint = surface.convertPosition(point, from: nil)
+        var localNormal = surface.convertVector(normal, from: nil)
+        let length = max(0.001, sqrt(localNormal.x * localNormal.x + localNormal.y * localNormal.y + localNormal.z * localNormal.z))
+        localNormal = SCNVector3(localNormal.x / length, localNormal.y / length, localNormal.z / length)
         let size = scratch ? CGFloat.random(in: 0.18...0.38) : CGFloat.random(in: 0.14...0.27)
         let plane = SCNPlane(width: size, height: size * CGFloat.random(in: 0.55...1.25))
         let mat = SCNMaterial()
@@ -1415,13 +1446,75 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         plane.firstMaterial = mat
         let mark = SCNNode(geometry: plane)
         mark.name = "Surface damage mark"
-        mark.position = SCNVector3(point.x + normal.x * 0.008, point.y + normal.y * 0.008, point.z + normal.z * 0.008)
-        mark.look(at: SCNVector3(point.x + normal.x, point.y + normal.y, point.z + normal.z),
-                  up: scene.rootNode.worldUp, localFront: SCNVector3(0, 0, 1))
+        mark.position = SCNVector3(localPoint.x + localNormal.x * 0.009, localPoint.y + localNormal.y * 0.009, localPoint.z + localNormal.z * 0.009)
+        mark.look(at: SCNVector3(localPoint.x + localNormal.x, localPoint.y + localNormal.y, localPoint.z + localNormal.z),
+                  up: SCNVector3(0, 1, 0), localFront: SCNVector3(0, 0, 1))
         mark.eulerAngles.z += CGFloat.random(in: 0...(2 * .pi))
-        mark.opacity = 0.88
-        scene.rootNode.addChildNode(mark)
+        mark.opacity = 0.94
+        surface.addChildNode(mark)
         surfaceDamageMarks.append(mark)
+    }
+
+    // Subdivide a struck box and indent the vertices around the impact point.
+    // This is actual vertex displacement; the rest of the component keeps its dimensions.
+    private func deformImpactMesh(_ part: SCNNode, worldPoint: SCNVector3, worldNormal: SCNVector3, intensity: CGFloat) {
+        guard var geometry = part.geometry else { return }
+        if let box = geometry as? SCNBox {
+            let dense = SCNBox(width: box.width, height: box.height, length: box.length, chamferRadius: min(box.chamferRadius, 0.012))
+            dense.widthSegmentCount = 18
+            dense.heightSegmentCount = 18
+            dense.lengthSegmentCount = 18
+            dense.materials = geometry.materials
+            geometry = dense
+        }
+        guard let source = geometry.sources(for: .vertex).first,
+              source.usesFloatComponents, source.bytesPerComponent == 4,
+              source.componentsPerVector >= 3, source.vectorCount >= 80 else { return }
+        let localPoint = part.convertPosition(worldPoint, from: nil)
+        var normal = part.convertVector(worldNormal, from: nil)
+        let nl = max(0.001, sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z))
+        normal = SCNVector3(normal.x / nl, normal.y / nl, normal.z / nl)
+        let bounds = geometry.boundingBox
+        let center = SCNVector3((bounds.min.x + bounds.max.x) * 0.5, (bounds.min.y + bounds.max.y) * 0.5, (bounds.min.z + bounds.max.z) * 0.5)
+        let sx = bounds.max.x - bounds.min.x, sy = bounds.max.y - bounds.min.y, sz = bounds.max.z - bounds.min.z
+        let tangent = max(0.10, min(sx, max(sy, sz)))
+        let radius = max(0.075, tangent * 0.30)
+        let depth = min(0.065, max(0.012, min(sx, min(sy, sz)) * 0.34)) * min(1.4, max(0.45, intensity))
+        var vertices = [SCNVector3]()
+        vertices.reserveCapacity(source.vectorCount)
+        source.data.withUnsafeBytes { raw in
+            guard let base = raw.baseAddress else { return }
+            for index in 0..<source.vectorCount {
+                let offset = source.dataOffset + index * source.dataStride
+                var x: Float = 0, y: Float = 0, z: Float = 0
+                memcpy(&x, base.advanced(by: offset), 4)
+                memcpy(&y, base.advanced(by: offset + 4), 4)
+                memcpy(&z, base.advanced(by: offset + 8), 4)
+                vertices.append(SCNVector3(CGFloat(x), CGFloat(y), CGFloat(z)))
+            }
+        }
+        var changed = false
+        for i in vertices.indices {
+            let v = vertices[i]
+            let facing = (v.x - center.x) * normal.x + (v.y - center.y) * normal.y + (v.z - center.z) * normal.z
+            let dx = v.x - localPoint.x, dy = v.y - localPoint.y, dz = v.z - localPoint.z
+            let along = dx * normal.x + dy * normal.y + dz * normal.z
+            let rx = dx - normal.x * along, ry = dy - normal.y * along, rz = dz - normal.z * along
+            let radial = sqrt(rx * rx + ry * ry + rz * rz)
+            if facing > 0 && radial < radius * 2.2 {
+                let bowl = exp(-pow(radial / radius, 2) * 2.1)
+                let lip = exp(-pow((radial - radius * 1.12) / (radius * 0.22), 2)) * 0.20
+                let push = depth * (bowl - lip)
+                vertices[i] = SCNVector3(v.x - normal.x * push, v.y - normal.y * push, v.z - normal.z * push)
+                changed = true
+            }
+        }
+        guard changed else { return }
+        var sources = [SCNGeometrySource(vertices: vertices)]
+        if let normals = geometry.sources(for: .normal).first { sources.append(normals) }
+        let dented = SCNGeometry(sources: sources, elements: geometry.elements)
+        dented.materials = geometry.materials
+        part.geometry = dented
     }
 
     private func damageDevicePart(_ part: SCNNode, at point: SCNVector3, normal: SCNVector3, intensity: CGFloat) {
@@ -1429,13 +1522,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         let key = ObjectIdentifier(part)
         let accumulated = (devicePartDamage[key] ?? 0) + max(0.08, intensity * 0.42)
         devicePartDamage[key] = accumulated
-        let dent = min(0.16, accumulated * 0.035)
-        let base = part.scale
-        part.scale = SCNVector3(max(0.72, base.x * (1 - dent)),
-                                max(0.72, base.y * (1 - dent * 0.55)),
-                                max(0.72, base.z * (1 - dent)))
-        part.eulerAngles.z += CGFloat.random(in: -0.018...0.018) * intensity
-        addSurfaceDamage(at: point, normal: normal, scratch: accumulated < 0.65)
+        deformImpactMesh(part, worldPoint: point, worldNormal: normal, intensity: intensity)
+        part.eulerAngles.z += CGFloat.random(in: -0.006...0.006) * intensity
+        addSurfaceDamage(at: point, normal: normal, scratch: accumulated < 0.65, on: part)
         if accumulated >= 1.65, part.parent === deviceRoot, let geometry = part.geometry {
             let world = part.presentation.worldPosition
             let rotation = part.presentation.eulerAngles
@@ -1463,7 +1552,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         let key = ObjectIdentifier(panel)
         let accumulated = (deskPanelDamage[key] ?? 0) + intensity * 0.55
         deskPanelDamage[key] = accumulated
-        addSurfaceDamage(at: point, normal: normal, scratch: accumulated < 1.2)
+        addSurfaceDamage(at: point, normal: normal, scratch: accumulated < 1.2, on: panel)
         guard accumulated >= 2.8, panel.physicsBody?.type == .static, let geometry = panel.geometry else { return }
         let world = panel.presentation.worldPosition
         let rotation = panel.presentation.eulerAngles
@@ -1513,8 +1602,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
               let source = SCNAudioSource(url: url) else { return }
         source.isPositional = true
         source.shouldStream = false
-        source.volume = volume
-        source.reverbBlend = 0.22
+        source.volume = volume * Float.random(in: 0.84...1.0)
+        source.reverbBlend = Float.random(in: 0.10...0.30)
         source.load()
         let emitter = SCNNode()
         emitter.position = position
@@ -1705,7 +1794,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             let touchesFrame = hit.node.name?.hasPrefix("Window frame") == true
             if !windowHasBroken && (touchesGlass || touchesFrame) {
                 windowHitCount += 1
-                addWindowCrack(at: hit.worldCoordinates, normal: hit.worldNormal, stage: windowHitCount)
+                if let glass = windowIntactGlass {
+                    addWindowCrack(at: hit.worldCoordinates, normal: hit.worldNormal, stage: windowHitCount, on: glass)
+                }
                 play(glassTapSound)
                 playSpatial("glass_tap", at: hit.worldCoordinates, volume: 0.9)
                 if windowHitCount == 1 {
@@ -1729,10 +1820,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             } else if let panel = deskBreakablePanels.first(where: { isInside(hit.node, root: $0) }) {
                 damageDeskPanel(panel, at: hit.worldCoordinates, normal: hit.worldNormal, intensity: CGFloat(damageLevel))
             } else if hit.node.name?.hasPrefix("Physics stack block") == true {
-                addSurfaceDamage(at: hit.worldCoordinates, normal: hit.worldNormal, scratch: damageLevel > 0.65)
-                hit.node.scale = SCNVector3(max(0.82, hit.node.scale.x - 0.012 * CGFloat(damageLevel)),
-                                            max(0.82, hit.node.scale.y - 0.012 * CGFloat(damageLevel)),
-                                            max(0.82, hit.node.scale.z - 0.012 * CGFloat(damageLevel)))
+                addSurfaceDamage(at: hit.worldCoordinates, normal: hit.worldNormal, scratch: damageLevel > 0.65, on: hit.node)
+                deformImpactMesh(hit.node, worldPoint: hit.worldCoordinates, worldNormal: hit.worldNormal, intensity: CGFloat(damageLevel))
             }
         }
         cursorToolPivot.removeAllActions()
