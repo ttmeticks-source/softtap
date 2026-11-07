@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Darwin
 
 let output = CommandLine.arguments.dropFirst().first ?? "Resources"
 try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
@@ -28,13 +29,13 @@ func render(_ name: String, scratch: Bool, seed: Int) throws {
         for spoke in 0..<spokes {
             let angle = Double(spoke) * 2 * Double.pi / Double(spokes) + Double(seed) * 0.13
             let radius = CGFloat(185 + (spoke * 23 + seed * 7) % 75)
-            let end = NSPoint(x: center + cos(angle) * radius, y: center + sin(angle) * radius)
+            let end = NSPoint(x: center + CGFloat(Darwin.cos(angle)) * radius, y: center + CGFloat(Darwin.sin(angle)) * radius)
             path.move(to: NSPoint(x: center, y: center))
             path.line(to: end)
-            let branch = NSPoint(x: center + cos(angle + 0.34) * radius * 0.62,
-                                 y: center + sin(angle + 0.34) * radius * 0.62)
-            path.move(to: NSPoint(x: center + cos(angle) * radius * 0.58,
-                                  y: center + sin(angle) * radius * 0.58))
+            let branch = NSPoint(x: center + CGFloat(Darwin.cos(angle + 0.34)) * radius * 0.62,
+                                 y: center + CGFloat(Darwin.sin(angle + 0.34)) * radius * 0.62)
+            path.move(to: NSPoint(x: center + CGFloat(Darwin.cos(angle)) * radius * 0.58,
+                                  y: center + CGFloat(Darwin.sin(angle)) * radius * 0.58))
             path.line(to: branch)
         }
         let ring = NSBezierPath(ovalIn: NSRect(x: center - 20, y: center - 20, width: 40, height: 40))
