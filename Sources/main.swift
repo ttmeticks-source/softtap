@@ -1,6 +1,7 @@
 import AppKit
 import SceneKit
 import QuartzCore
+import Darwin
 
 final class SmashSceneView: SCNView {
     private var mouseTracking: NSTrackingArea?
