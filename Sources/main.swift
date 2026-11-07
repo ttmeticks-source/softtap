@@ -68,30 +68,20 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private let cameraBounds = (x: CGFloat(9.20), y: CGFloat(6.35), z: CGFloat(8.15))
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.activate(ignoringOtherApps: true)
-        guard showAgeNotice() else {
-            NSApp.terminate(nil)
-            return
-        }
+        // Build the complete scene before exposing the window. This avoids showing
+        // a blank view during first-frame setup and removes the blocking startup modal.
+        NSApp.setActivationPolicy(.regular)
         buildWindow()
         buildScene()
-    }
-
-    private func showAgeNotice() -> Bool {
-        let notice = NSAlert()
-        notice.alertStyle = .warning
-        notice.messageText = "16+ VIRTUAL SIMULATION NOTICE"
-        notice.informativeText = "Smash Simulator is intended for users aged 16 and older. All effects are fictional simulations inside this app. Do not try to reproduce them on real devices or property. This is a self-confirmation prompt, not identity or age verification."
-        notice.addButton(withTitle: "I confirm I am 16 or older")
-        notice.addButton(withTitle: "Quit")
-        return notice.runModal() == .alertFirstButtonReturn
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func buildWindow() {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 760),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable],
                           backing: .buffered, defer: false)
-        window.title = "Smash Simulator"
+        window.title = "Smash Simulator — Demo"
         window.center()
         window.minSize = NSSize(width: 900, height: 620)
 
@@ -112,14 +102,14 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         heading.translatesAutoresizingMaskIntoConstraints = false
         sidebar.addSubview(heading)
 
-        let subtitle = NSTextField(labelWithString: "VIRTUAL DESTRUCTION LAB")
+        let subtitle = NSTextField(labelWithString: "PLAYABLE DEMO  •  PHYSICS SANDBOX")
         subtitle.font = .systemFont(ofSize: 9, weight: .bold)
         subtitle.textColor = NSColor(calibratedWhite: 0.58, alpha: 1)
         subtitle.translatesAutoresizingMaskIntoConstraints = false
         sidebar.addSubview(subtitle)
 
 
-        devicePopup = popup(["iPhone", "MacBook", "Desktop PC", "iPad"], selected: selectedDevice)
+        devicePopup = popup(["iPhone", "MacBook", "Desktop PC", "iPad", "TV"], selected: selectedDevice)
         toolPopup = popup(["Hammer", "Rubber Mallet", "Wrench", "Screwdriver", "Flashlight"], selected: selectedTool)
         roomPopup = popup(["Studio", "Garage", "Concrete", "Bedroom", "Neon Lab"], selected: roomStyle)
 
@@ -207,7 +197,6 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         toolPopup.target = self; toolPopup.action = #selector(toolChanged(_:))
         roomPopup.target = self; roomPopup.action = #selector(roomChanged(_:))
         window.acceptsMouseMovedEvents = true
-        window.makeKeyAndOrderFront(nil)
     }
 
 
@@ -263,6 +252,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private func makeButton(_ title: String, action: Selector) -> NSButton {
         let b = NSButton(title: title, target: self, action: action)
         b.bezelStyle = .rounded
+        b.bezelColor = NSColor(calibratedRed: 0.10, green: 0.34, blue: 0.48, alpha: 1)
+        b.contentTintColor = .white
         b.font = .systemFont(ofSize: 11, weight: .bold)
         b.translatesAutoresizingMaskIntoConstraints = false
         b.heightAnchor.constraint(equalToConstant: 34).isActive = true
@@ -517,7 +508,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     // Cosmetic texture-plane overlays only; no material damage model is used.
     private func addImpactDecal(at point: SCNVector3, normal: SCNVector3, impulse: CGFloat, surfaceName: String) {
         let surface = surfaceName.lowercased()
-        let isGlass = surface.contains("glass") || surface.contains("window")
+        let isGlass = surface.contains("glass") || surface.contains("window") || surface.contains("screen") || surface.contains("display")
         let isSoft = surface.contains("floor") || surface.contains("carpet")
         let isScratch = !isGlass && !isSoft &&
             (impulse > 4.2 || surface.contains("wood") || surface.contains("desk") ||
@@ -978,6 +969,28 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                     addShellBox("Desktop case foot", SCNVector3(0.12, 0.08, 0.12), SCNVector3(x, 0.025, z), dark)
                 }
             }
+        case "TV":
+            addShellBox("TV rear housing", SCNVector3(3.82, 2.38, 0.20), SCNVector3(0, 1.20, 0), dark, 0.12)
+            addShellBox("TV front bezel", SCNVector3(3.84, 2.40, 0.095), SCNVector3(0, 1.20, 0.105), metal, 0.12)
+            addShellBox("TV display glass", SCNVector3(3.58, 2.08, 0.035), SCNVector3(0, 1.22, 0.17), glass, 0.025)
+            addShellBox("TV lower chin", SCNVector3(3.80, 0.13, 0.10), SCNVector3(0, 0.10, 0.12), dark, 0.025)
+            addShellBox("TV stand neck", SCNVector3(0.18, 0.42, 0.22), SCNVector3(0, 0.22, -0.03), metal, 0.035)
+            addShellBox("TV stand foot", SCNVector3(1.15, 0.075, 0.55), SCNVector3(0, 0.035, 0.02), dark, 0.035)
+            for x: CGFloat in [-1.72, 1.72] {
+                for i in 0..<18 {
+                    addShellBox("TV speaker grille", SCNVector3(0.018, 0.012, 0.035),
+                                SCNVector3(x, 0.105, 0.18 + CGFloat(i) * 0.018), metal, 0.004)
+                }
+            }
+            addShellSphere("TV status LED", radius: 0.018, position: SCNVector3(1.78, 0.11, 0.18), surface: metal)
+            for x: CGFloat in [-1.2, -0.8, 0.8, 1.2] {
+                addShellBox("TV rear ventilation slot", SCNVector3(0.28, 0.018, 0.035),
+                            SCNVector3(x, 2.25, -0.11), metal, 0.006)
+            }
+            for i in 0..<4 {
+                addShellBox("TV input port", SCNVector3(0.12, 0.055, 0.045),
+                            SCNVector3(-1.2 + CGFloat(i) * 0.22, 0.28, -0.12), metal, 0.01)
+            }
         case "iPad":
             root.addChildNode(box(2.25, 0.12, 3.0, metal, SCNVector3(0, 0.22, 0)))
             root.addChildNode(box(2.08, 0.035, 2.78, glass, SCNVector3(0, 0.30, 0)))
@@ -1038,6 +1051,18 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             for y: CGFloat in [0.48, 1.10] {
                 addInternalCylinder("Case fan", radius: 0.25, height: 0.06, position: SCNVector3(2.05, y, 0.32), color: graphite)
             }
+        case "TV":
+            addInternalBox("TV main logic board", SCNVector3(1.12, 0.055, 0.52), SCNVector3(0.82, 0.72, -0.02), board)
+            addInternalBox("TV power supply board", SCNVector3(0.72, 0.045, 0.58), SCNVector3(-0.98, 0.64, -0.02), board)
+            addInternalBox("TV backlight driver", SCNVector3(0.42, 0.035, 0.30), SCNVector3(-1.45, 0.90, -0.02), copper)
+            addInternalBox("TV speaker left", SCNVector3(0.22, 0.12, 0.38), SCNVector3(-1.62, 0.35, -0.01), graphite)
+            addInternalBox("TV speaker right", SCNVector3(0.22, 0.12, 0.38), SCNVector3(1.62, 0.35, -0.01), graphite)
+            addInternalBox("TV LCD panel stack", SCNVector3(3.48, 1.98, 0.045), SCNVector3(0, 1.22, 0.06), silver)
+            for i in 0..<8 {
+                addInternalBox("TV LED backlight strip", SCNVector3(0.025, 1.78, 0.035),
+                               SCNVector3(-1.48 + CGFloat(i) * 0.42, 1.22, -0.01), copper)
+            }
+            addInternalBox("TV ribbon cable", SCNVector3(0.055, 0.48, 0.025), SCNVector3(0.30, 0.70, 0.04), silver)
         case "iPad":
             addInternalBox("Tablet logic board", SCNVector3(0.38, 0.045, 1.42), SCNVector3(0.62, 0.38, 0), board)
             addInternalBox("Tablet battery", SCNVector3(1.22, 0.05, 1.55), SCNVector3(-0.36, 0.37, 0), graphite)
@@ -1082,6 +1107,16 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                                SCNVector3(1.72 + CGFloat(i) * 0.11, 0.62, 0.22), copper, 0.32)
             }
             addInternalBox("Motherboard power connector", SCNVector3(0.10, 0.12, 0.16), SCNVector3(2.34, 1.18, 0.12), silver)
+        case "TV":
+            for i in 0..<14 {
+                addInternalBox("TV board microcomponent", SCNVector3(0.07, 0.028, 0.075),
+                               SCNVector3(0.38 + CGFloat(i % 7) * 0.13, 0.78, -0.25 + CGFloat(i / 7) * 0.18), copper, 0.30)
+            }
+            for x: CGFloat in [-1.62, 1.62] {
+                addInternalCylinder("TV speaker driver", radius: 0.075, height: 0.08,
+                                    position: SCNVector3(x, 0.36, 0.02), color: silver)
+            }
+            addInternalBox("TV main ribbon connector", SCNVector3(0.42, 0.025, 0.055), SCNVector3(0.18, 0.69, 0.04), silver, 0.24)
         case "iPad":
             for i in 0..<10 {
                 addInternalBox("Tablet board component", SCNVector3(0.07, 0.024, 0.08),
@@ -1096,12 +1131,13 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             addInternalBox("Phone charging daughterboard", SCNVector3(0.40, 0.035, 0.12), SCNVector3(0, 0.40, 1.00), board)
             addInternalBox("Phone antenna flex", SCNVector3(0.045, 0.018, 0.68), SCNVector3(-0.48, 0.42, 0.10), silver, 0.22)
         }
-        let collisionSize: SCNVector3 = selectedDevice == "MacBook" ? SCNVector3(3.0, 1.94, 2.0) : (selectedDevice == "Desktop PC" ? SCNVector3(3.0, 2.15, 1.0) : (selectedDevice == "iPad" ? SCNVector3(2.3, 0.16, 3.0) : SCNVector3(1.3, 0.205, 2.5)))
+        let collisionSize: SCNVector3 = selectedDevice == "MacBook" ? SCNVector3(3.0, 1.94, 2.0) : (selectedDevice == "Desktop PC" ? SCNVector3(3.0, 2.15, 1.0) : (selectedDevice == "iPad" ? SCNVector3(2.3, 0.16, 3.0) : (selectedDevice == "TV" ? SCNVector3(3.84, 2.40, 0.34) : SCNVector3(1.3, 0.205, 2.5))))
         let modelCenterY: CGFloat
         switch selectedDevice {
         case "MacBook": modelCenterY = 1.0825
         case "Desktop PC": modelCenterY = 1.10
         case "iPad": modelCenterY = 0.23
+        case "TV": modelCenterY = 1.20
         default: modelCenterY = 0.2025
         }
         for child in root.childNodes {
@@ -1115,6 +1151,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             let profile: (mass: CGFloat, friction: CGFloat, restitution: CGFloat, angular: CGFloat)
             switch selectedDevice {
             case "Desktop PC": profile = (9.0, 0.88, 0.035, 0.68)
+            case "TV": profile = (7.2, 0.80, 0.04, 0.64)
             case "MacBook": profile = (3.4, 0.82, 0.045, 0.62)
             case "iPad": profile = (1.1, 0.76, 0.055, 0.58)
             default: profile = (0.42, 0.72, 0.065, 0.54)
@@ -1170,7 +1207,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             contactNames.contains("pull") || contactNames.contains("hinge")
         let touchesFloor = contactNames.contains("floor") || contactNames.contains("carpet")
 
-        if contactNames.contains("glass") || contactNames.contains("window") {
+        if contactNames.contains("glass") || contactNames.contains("window") || contactNames.contains("screen") || contactNames.contains("display") {
             play(glassTapSound)
             if impulse > 1.0 { play(glassCrackleSound) }
             if touchesDevice { play(deviceRattleSound) }

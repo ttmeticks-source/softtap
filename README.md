@@ -1,4 +1,4 @@
-# Smash Simulator
+# Smash Simulator — Demo
 
 A native macOS SceneKit sandbox for virtual devices and room scenes.
 
@@ -18,9 +18,9 @@ The installer shows download progress, checks the macOS 11 minimum and both CPU 
 
 ## Startup notice and controls
 
-At launch, the app shows one 16+ self-confirmation notice. Choosing Quit exits. The prompt is an age declaration only; it does not scan faces or independently verify identity or age.
+This is a playable demo build. It opens directly into the sandbox; the interface labels the build as a demo.
 
-The SceneKit world uses a 120 Hz simulation step, centralized gravity/speed tuning, explicit collision categories and contact notifications for the existing dynamic bodies. Contact notifications update the status display and cosmetic decals. A single framed window setpiece swaps to 16 pre-authored shard meshes when a qualifying SceneKit contact exceeds its threshold; shards receive brief in-app impulses and are removed after four seconds. The scene includes a full collidable room enclosure (floor, four walls and ceiling) and a workbench with a collidable tabletop, four legs, frame rails, two drawers and drawer pulls. The selected virtual device is positioned on the workbench. SceneKit camera orbit remains enabled, with the camera position clamped inside the room volume. Click objects in the 3D view to inspect them. A brief selection marker and status text identify the selected scene node. Use the sidebar to choose a virtual device, tool preset, room and impact setting.
+The SceneKit world uses a 120 Hz simulation step, centralized gravity/speed tuning, explicit collision categories and contact notifications for the existing dynamic bodies. Contact notifications update the status display and cosmetic decals. A single framed window setpiece swaps to 16 pre-authored shard meshes when a qualifying SceneKit contact exceeds its threshold; shards receive brief in-app impulses and are removed after four seconds. The scene includes a full collidable room enclosure (floor, four walls and ceiling) and a workbench with a collidable tabletop, four legs, frame rails, two drawers and drawer pulls. The selected virtual device (including a TV) is positioned on the workbench. SceneKit camera orbit remains enabled, with the camera position clamped inside the room volume. Click objects in the 3D view to inspect them. A brief selection marker and status text identify the selected scene node. Use the sidebar to choose a virtual device, tool preset, room and impact setting.
 
 ## Simulation scope
 

@@ -20,26 +20,43 @@ for size in sizes {
     let image = NSImage(size: NSSize(width:size,height:size))
     image.lockFocus()
     let bounds = NSRect(x:0,y:0,width:size,height:size)
-    NSColor(calibratedRed:0.07,green:0.10,blue:0.16,alpha:1).setFill()
+    NSColor(calibratedRed:0.025,green:0.055,blue:0.09,alpha:1).setFill()
     NSBezierPath(roundedRect:bounds,xRadius:Double(size)*0.22,yRadius:Double(size)*0.22).fill()
     let inset = Double(size)*0.045
     let background = NSBezierPath(roundedRect:NSRect(x:inset,y:inset,width:Double(size)-2*inset,height:Double(size)-2*inset),xRadius:Double(size)*0.22,yRadius:Double(size)*0.22)
     let gradient = NSGradient(colors:[
-        NSColor(calibratedRed:0.035,green:0.10,blue:0.19,alpha:1),
-        NSColor(calibratedRed:0.10,green:0.20,blue:0.30,alpha:1)
+        NSColor(calibratedRed:0.04,green:0.16,blue:0.22,alpha:1),
+        NSColor(calibratedRed:0.08,green:0.28,blue:0.34,alpha:1)
     ])!
     gradient.draw(in:background,angle:135)
     let ring = NSBezierPath(ovalIn:NSRect(x:Double(size)*0.13,y:Double(size)*0.13,width:Double(size)*0.74,height:Double(size)*0.74))
     NSColor(calibratedRed:0.25,green:0.72,blue:0.88,alpha:0.22).setStroke()
     ring.lineWidth = max(1,Double(size)*0.018)
     ring.stroke()
-    let handle = NSBezierPath()
-    handle.move(to:NSPoint(x:Double(size)*0.39,y:Double(size)*0.27))
-    handle.line(to:NSPoint(x:Double(size)*0.66,y:Double(size)*0.62))
-    handle.lineCapStyle = .round
-    handle.lineWidth = max(3,Double(size)*0.095)
+    let screen = NSBezierPath(roundedRect:NSRect(x:Double(size)*0.20,y:Double(size)*0.20,width:Double(size)*0.60,height:Double(size)*0.48),xRadius:Double(size)*0.055,yRadius:Double(size)*0.055)
+    NSColor(calibratedRed:0.025,green:0.045,blue:0.065,alpha:1).setFill()
+    screen.fill()
+    screen.lineWidth = max(1,Double(size)*0.025)
+    NSColor(calibratedRed:0.50,green:0.76,blue:0.82,alpha:1).setStroke()
+    screen.stroke()
+    let crack = NSBezierPath()
+    crack.move(to:NSPoint(x:Double(size)*0.50,y:Double(size)*0.62))
+    crack.line(to:NSPoint(x:Double(size)*0.43,y:Double(size)*0.49))
+    crack.line(to:NSPoint(x:Double(size)*0.54,y:Double(size)*0.40))
+    crack.line(to:NSPoint(x:Double(size)*0.47,y:Double(size)*0.27))
+    crack.lineCapStyle = .round
+    crack.lineJoinStyle = .round
+    crack.lineWidth = max(1,Double(size)*0.025)
+    NSColor(calibratedRed:0.35,green:0.86,blue:0.96,alpha:1).setStroke()
+    crack.stroke()
+    let stand = NSBezierPath()
+    stand.move(to:NSPoint(x:Double(size)*0.50,y:Double(size)*0.20))
+    stand.line(to:NSPoint(x:Double(size)*0.50,y:Double(size)*0.12))
+    stand.line(to:NSPoint(x:Double(size)*0.37,y:Double(size)*0.12))
+    stand.line(to:NSPoint(x:Double(size)*0.63,y:Double(size)*0.12))
+    stand.lineWidth = max(2,Double(size)*0.045)
     NSColor(calibratedRed:0.72,green:0.78,blue:0.84,alpha:1).setStroke()
-    handle.stroke()
+    stand.stroke()
     let head = NSBezierPath(roundedRect:NSRect(x:Double(size)*0.23,y:Double(size)*0.59,width:Double(size)*0.48,height:Double(size)*0.19),xRadius:Double(size)*0.055,yRadius:Double(size)*0.055)
     NSColor(calibratedRed:0.91,green:0.45,blue:0.23,alpha:1).setFill()
     head.fill()
@@ -90,8 +107,8 @@ cat > "$CONTENTS/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-<key>CFBundleName</key><string>Smash Simulator</string>
-<key>CFBundleDisplayName</key><string>Smash Simulator</string>
+<key>CFBundleName</key><string>Smash Simulator Demo</string>
+<key>CFBundleDisplayName</key><string>Smash Simulator Demo</string>
 <key>CFBundleIdentifier</key><string>com.ttmeticks.smashsimulator</string>
 <key>CFBundleVersion</key><string>1.1.0</string>
 <key>CFBundleShortVersionString</key><string>1.1.0</string>
