@@ -112,7 +112,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
 
         devicePopup = popup(["iPhone", "MacBook", "Desktop PC", "iPad", "TV"], selected: selectedDevice)
-        toolPopup = popup(["Hammer", "Rubber Mallet", "Wrench", "Screwdriver", "Flashlight"], selected: selectedTool)
+        toolPopup = popup(["Hammer", "Rubber Mallet", "Wrench", "Screwdriver", "Flashlight", "Impact Driver", "Plastic Spudger", "Suction Cup"], selected: selectedTool)
         roomPopup = popup(["Studio", "Garage", "Concrete", "Bedroom", "Neon Lab"], selected: roomStyle)
 
         addSection("DEVICE", control: devicePopup, to: sidebar, top: subtitle, gap: 28)
@@ -385,7 +385,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             format: "Scene contact: %@ ↔ %@  ·  impulse %.1f",
             first, second, impulse
         )
-        playSurfaceImpact(first: first, second: second, impulse: impulse)
+        playSurfaceImpact(first: first, second: second, impulse: impulse, position: contact.contactPoint)
         addImpactDecal(at: contact.contactPoint, normal: contact.contactNormal, impulse: impulse, surfaceName: first + " " + second)
         let touchesWindow = contact.nodeA.name == "Breakable window glass" || contact.nodeB.name == "Breakable window glass"
         if touchesWindow && impulse >= windowBreakThreshold {
@@ -467,6 +467,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         shardGroup.isHidden = false
         play(shatterSound)
         play(debrisScatterSound)
+        playSpatial("glass_shatter", at: impactPoint, volume: 1.0)
+        playSpatial("debris_scatter", at: impactPoint, volume: 0.82)
 
         for shard in shardGroup.childNodes {
             shard.isHidden = false
@@ -1301,7 +1303,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         }
         let excludedPartWords = ["perforation", "grille", "port", "button", "led", "lens", "speaker", "fan hub", "case foot", "webcam"]
         breakableComponents = root.childNodes.filter { node in
-            guard node.geometry != nil else { return false }
+            guard node.geometry != nil, !internalParts.contains(where: { $0 === node }) else { return false }
             let name = (node.name ?? "").lowercased()
             if excludedPartWords.contains(where: { name.contains($0) }) { return false }
             let bounds = node.boundingBox
@@ -1395,7 +1397,24 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
     @objc private func damageChanged(_ sender: NSSlider) { damageLevel = Float(sender.floatValue) }
 
-    private func playSurfaceImpact(first: String, second: String, impulse: CGFloat) {
+    private func playSpatial(_ name: String, at position: SCNVector3, volume: Float = 1.0) {
+        guard let url = Bundle.main.url(forResource: name, withExtension: "wav"),
+              let source = SCNAudioSource(url: url) else { return }
+        source.isPositional = true
+        source.shouldStream = false
+        source.volume = volume
+        source.reverbBlend = 0.22
+        source.load()
+        let emitter = SCNNode()
+        emitter.position = position
+        emitter.addAudioPlayer(SCNAudioPlayer(source: source))
+        scene.rootNode.addChildNode(emitter)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak emitter] in
+            emitter?.removeFromParentNode()
+        }
+    }
+
+    private func playSurfaceImpact(first: String, second: String, impulse: CGFloat, position: SCNVector3) {
         let contactNames = (first + " " + second).lowercased()
         let touchesDevice = contactNames.contains("device") || contactNames.contains("phone") ||
             contactNames.contains("tablet") || contactNames.contains("laptop")
@@ -1406,23 +1425,23 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         let touchesFloor = contactNames.contains("floor") || contactNames.contains("carpet")
 
         if contactNames.contains("glass") || contactNames.contains("window") || contactNames.contains("screen") || contactNames.contains("display") {
-            play(glassTapSound)
-            if impulse > 1.0 { play(glassCrackleSound) }
-            if touchesDevice { play(deviceRattleSound) }
+            playSpatial("glass_tap", at: position, volume: 0.9)
+            if impulse > 1.0 { playSpatial("glass_crackle", at: position, volume: 0.82) }
+            if touchesDevice { playSpatial("device_rattle", at: position, volume: 0.72) }
         } else if touchesMetal {
-            play(metalClangSound)
-            if touchesDevice { play(deviceRattleSound) }
+            playSpatial("metal_clang", at: position, volume: 0.9)
+            if touchesDevice { playSpatial("device_rattle", at: position, volume: 0.68) }
         } else if touchesWood {
-            play(woodKnockSound)
-            if touchesDevice { play(deviceRattleSound) }
+            playSpatial("wood_knock", at: position, volume: 0.86)
+            if touchesDevice { playSpatial("device_rattle", at: position, volume: 0.62) }
         } else if touchesFloor {
-            play(carpetThumpSound)
-            if touchesDevice { play(deviceRattleSound) }
+            playSpatial("carpet_thump", at: position, volume: 0.78)
+            if touchesDevice { playSpatial("device_rattle", at: position, volume: 0.62) }
         } else if touchesDevice {
-            if impulse > 4.2 { play(scratchSound) } else { play(deviceThudSound) }
-            if impulse > 1.8 { play(deviceRattleSound) }
+            playSpatial(impulse > 4.2 ? "surface_scratch" : "device_thud", at: position, volume: 0.9)
+            if impulse > 1.8 { playSpatial("device_rattle", at: position, volume: 0.68) }
         } else {
-            play(plasticClickSound ?? impactSound)
+            playSpatial("plastic_click", at: position, volume: 0.7)
         }
     }
 
@@ -1560,7 +1579,11 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                 windowHitCount += 1
                 addWindowCrack(at: hit.worldCoordinates, normal: hit.worldNormal, stage: windowHitCount)
                 play(glassTapSound)
-                if windowHitCount == 1 { play(glassCrackleSound) }
+                playSpatial("glass_tap", at: hit.worldCoordinates, volume: 0.9)
+                if windowHitCount == 1 {
+                    play(glassCrackleSound)
+                    playSpatial("glass_crackle", at: hit.worldCoordinates, volume: 0.82)
+                }
                 if windowHitCount >= 2 {
                     breakWindow(at: hit.worldCoordinates)
                 } else {
@@ -1571,6 +1594,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                 addImpactDecal(at: hit.worldCoordinates, normal: hit.worldNormal, impulse: CGFloat(damageLevel) * 5, surfaceName: hit.node.name ?? "Device")
                 let strikeImpulse = CGFloat(damageLevel) * 5
                 if strikeImpulse > 4.2 { play(scratchSound) } else { play(deviceThudSound) }
+                playSpatial(strikeImpulse > 4.2 ? "surface_scratch" : "device_thud", at: hit.worldCoordinates, volume: 0.92)
                 if damageLevel > 0.28 { detachNearestDevicePart(at: hit.worldCoordinates) }
                 if damageLevel > 0.45 { play(deviceRattleSound) }
                 device.physicsBody?.applyForce(SCNVector3(0, power * 0.07, power), asImpulse: true)
