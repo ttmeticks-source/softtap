@@ -2220,6 +2220,61 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             colors[index % colors.count].withAlphaComponent(0.70).setStroke()
             band.stroke()
         }
+        // On the iPhone, show a stronger OLED-style failure beneath the glass:
+        // dark ink pooling at the impact point, saturated RGB bleed, and broken pixel rows.
+        // This is a screen-texture effect; the existing glass crack geometry remains separate.
+        if selectedDevice == "iPhone" || (surface.name ?? "").lowercased().contains("phone") {
+            let impactRadius = CGFloat.random(in: 34...58)
+            let ink = NSBezierPath(ovalIn: NSRect(x: center.x - impactRadius,
+                                                   y: center.y - impactRadius * 0.72,
+                                                   width: impactRadius * 2,
+                                                   height: impactRadius * 1.44))
+            NSColor(calibratedRed: 0.012, green: 0.018, blue: 0.035, alpha: 0.88).setFill()
+            ink.fill()
+
+            // Irregular coloured OLED bleed radiates away from the damaged pixels.
+            let bleedColors: [NSColor] = [
+                NSColor(calibratedRed: 1.0, green: 0.035, blue: 0.16, alpha: 0.78),
+                NSColor(calibratedRed: 0.02, green: 0.82, blue: 1.0, alpha: 0.76),
+                NSColor(calibratedRed: 0.62, green: 0.08, blue: 1.0, alpha: 0.72),
+                NSColor(calibratedRed: 0.20, green: 1.0, blue: 0.32, alpha: 0.68)
+            ]
+            for index in 0..<18 {
+                let angle = CGFloat(index) * (.pi * 2 / 18) + CGFloat.random(in: -0.22...0.22)
+                let distance = CGFloat.random(in: 22...142)
+                let blobWidth = CGFloat.random(in: 5...24)
+                let blobHeight = CGFloat.random(in: 12...48)
+                let blob = NSBezierPath(ovalIn: NSRect(
+                    x: center.x + cos(angle) * distance - blobWidth / 2,
+                    y: center.y + sin(angle) * distance - blobHeight / 2,
+                    width: blobWidth, height: blobHeight))
+                bleedColors[index % bleedColors.count].setFill()
+                blob.fill()
+            }
+
+            // Horizontal sub-pixel failures and offset RGB scan bands make the panel
+            // look electrically damaged rather than like a coloured crack decal.
+            for row in 0..<15 {
+                let y = center.y + CGFloat(row - 7) * CGFloat.random(in: 5...13)
+                let x = center.x + CGFloat.random(in: -105...55)
+                let length = CGFloat.random(in: 18...150)
+                let band = NSBezierPath()
+                band.lineWidth = CGFloat.random(in: 2...9)
+                band.move(to: NSPoint(x: x, y: y))
+                band.line(to: NSPoint(x: min(505, x + length), y: y + CGFloat.random(in: -3...3)))
+                bleedColors[row % bleedColors.count].withAlphaComponent(0.82).setStroke()
+                band.stroke()
+            }
+            for block in 0..<34 {
+                let x = center.x + CGFloat.random(in: -155...155)
+                let y = center.y + CGFloat.random(in: -155...155)
+                let pixel = NSRect(x: x, y: y,
+                                   width: CGFloat.random(in: 3...13),
+                                   height: CGFloat.random(in: 3...10))
+                bleedColors[block % bleedColors.count].withAlphaComponent(CGFloat.random(in: 0.38...0.82)).setFill()
+                NSBezierPath(rect: pixel).fill()
+            }
+        }
         image.unlockFocus()
         let plane = SCNPlane(width: width, height: height)
         let decalMaterial = SCNMaterial()
