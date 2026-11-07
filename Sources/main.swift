@@ -48,6 +48,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private var deviceRattleSound: NSSound?
     private var glassCrackleSound: NSSound?
     private var debrisScatterSound: NSSound?
+    private var activeImpactSounds: [NSSound] = []
     private var impactDecals: [SCNNode] = []
     private let maximumImpactDecals = 40
     private let windowBreakThreshold: CGFloat = 0.75
@@ -1734,34 +1735,64 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
     // Marks are attached to the struck component, not left behind in world space.
     private func addSurfaceDamage(at point: SCNVector3, normal: SCNVector3, scratch: Bool, on surface: SCNNode) {
-        let prefix = scratch ? "scratch" : "dent"
-        let names = (1...6).map { String(format: "%@_%02d", prefix, $0) }
-        guard let name = names.randomElement(),
-              let url = Bundle.main.url(forResource: name, withExtension: "png"),
-              let image = NSImage(contentsOf: url) else { return }
-        if surfaceDamageMarks.count >= 48 { surfaceDamageMarks.removeFirst().removeFromParentNode() }
         let localPoint = surface.convertPosition(point, from: nil)
         var localNormal = surface.convertVector(normal, from: nil)
-        let length = max(0.001, sqrt(localNormal.x * localNormal.x + localNormal.y * localNormal.y + localNormal.z * localNormal.z))
-        localNormal = SCNVector3(localNormal.x / length, localNormal.y / length, localNormal.z / length)
-        let size = scratch ? CGFloat.random(in: 0.18...0.34) : CGFloat.random(in: 0.36...0.62)
-        let plane = SCNPlane(width: size, height: size * CGFloat.random(in: 0.55...1.25))
-        let mat = SCNMaterial()
-        mat.diffuse.contents = image
-        mat.transparent.contents = image
-        mat.isDoubleSided = true
-        mat.lightingModel = .constant
-        mat.blendMode = .alpha
-        plane.firstMaterial = mat
-        let mark = SCNNode(geometry: plane)
-        mark.name = "Surface damage mark"
-        mark.position = SCNVector3(localPoint.x + localNormal.x * 0.0025, localPoint.y + localNormal.y * 0.0025, localPoint.z + localNormal.z * 0.0025)
-        mark.look(at: SCNVector3(localPoint.x + localNormal.x, localPoint.y + localNormal.y, localPoint.z + localNormal.z),
-                  up: SCNVector3(0, 1, 0), localFront: SCNVector3(0, 0, 1))
-        mark.eulerAngles.z += CGFloat.random(in: 0...(2 * .pi))
-        mark.opacity = 1.0
-        surface.addChildNode(mark)
-        surfaceDamageMarks.append(mark)
+        let normalLength = max(0.001, sqrt(localNormal.x * localNormal.x + localNormal.y * localNormal.y + localNormal.z * localNormal.z))
+        localNormal = SCNVector3(localNormal.x / normalLength, localNormal.y / normalLength, localNormal.z / normalLength)
+        if surfaceDamageMarks.count >= 48 { surfaceDamageMarks.removeFirst().removeFromParentNode() }
+
+        if scratch {
+            // A curved, hairline groove is built from short cylinders. The entire
+            // polyline is parented to the damaged component, so it moves with it.
+            var tangent = SCNVector3(-localNormal.y, localNormal.x, 0)
+            var tangentLength = sqrt(tangent.x * tangent.x + tangent.y * tangent.y + tangent.z * tangent.z)
+            if tangentLength < 0.01 {
+                tangent = SCNVector3(1, 0, 0)
+                tangentLength = 1
+            }
+            tangent = SCNVector3(tangent.x / tangentLength, tangent.y / tangentLength, tangent.z / tangentLength)
+            let bitangent = SCNVector3(
+                localNormal.y * tangent.z - localNormal.z * tangent.y,
+                localNormal.z * tangent.x - localNormal.x * tangent.z,
+                localNormal.x * tangent.y - localNormal.y * tangent.x
+            )
+            let length = CGFloat.random(in: 0.20...0.42)
+            let bend = CGFloat.random(in: -0.045...0.045)
+            let segments = 9
+            var previous: SCNVector3?
+            for index in 0...segments {
+                let t = CGFloat(index) / CGFloat(segments)
+                let sideways = (t - 0.5) * length
+                let curve = sin(t * .pi) * bend
+                let p = SCNVector3(
+                    localPoint.x + tangent.x * sideways + bitangent.x * curve + localNormal.x * 0.004,
+                    localPoint.y + tangent.y * sideways + bitangent.y * curve + localNormal.y * 0.004,
+                    localPoint.z + tangent.z * sideways + bitangent.z * curve + localNormal.z * 0.004
+                )
+                if let a = previous {
+                    let dx = p.x-a.x, dy = p.y-a.y, dz = p.z-a.z
+                    let segmentLength = max(0.001, sqrt(dx*dx + dy*dy + dz*dz))
+                    let line = SCNNode(geometry: SCNCylinder(radius: 0.0022, height: segmentLength))
+                    line.name = "Surface damage mark"
+                    line.geometry?.firstMaterial = material(NSColor(calibratedWhite: 0.055, alpha: 0.96), roughness: 0.92)
+                    line.position = SCNVector3((a.x+p.x)*0.5, (a.y+p.y)*0.5, (a.z+p.z)*0.5)
+                    line.look(at: p, up: localNormal, localFront: SCNVector3(0, 1, 0))
+                    surface.addChildNode(line)
+                    surfaceDamageMarks.append(line)
+                }
+                previous = p
+            }
+        } else {
+            let dent = SCNNode(geometry: SCNSphere(radius: 0.012))
+            dent.name = "Surface damage mark"
+            dent.geometry?.firstMaterial = material(NSColor(calibratedWhite: 0.12, alpha: 0.72), roughness: 0.88)
+            dent.scale = SCNVector3(1.8, 0.35, 1.2)
+            dent.position = SCNVector3(localPoint.x + localNormal.x * 0.003, localPoint.y + localNormal.y * 0.003, localPoint.z + localNormal.z * 0.003)
+            dent.look(at: SCNVector3(localPoint.x + localNormal.x, localPoint.y + localNormal.y, localPoint.z + localNormal.z),
+                      up: SCNVector3(0, 1, 0), localFront: SCNVector3(0, 0, 1))
+            surface.addChildNode(dent)
+            surfaceDamageMarks.append(dent)
+        }
     }
 
     private struct MaterialDeformationProfile {
@@ -2153,21 +2184,22 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     @objc private func audioVolumeChanged(_ sender: NSSlider) { audioVolume = Float(sender.floatValue) }
 
     private func playSpatial(_ name: String, at position: SCNVector3, volume: Float = 1.0) {
+        // Use AppKit playback as the dependable audible path. SceneKit's audio
+        // nodes can be silent on some macOS/driver combinations even when loaded.
         let alternate = name + "_alt"
         let chosenName = Bool.random() && Bundle.main.url(forResource: alternate, withExtension: "wav") != nil ? alternate : name
         guard let url = Bundle.main.url(forResource: chosenName, withExtension: "wav"),
-              let source = SCNAudioSource(url: url) else { return }
-        source.isPositional = false
-        source.shouldStream = false
-        source.volume = audioVolume * volume * Float.random(in: 0.88...1.0)
-        source.reverbBlend = 0.12
-        source.load()
-        let emitter = SCNNode()
-        emitter.position = position
-        emitter.addAudioPlayer(SCNAudioPlayer(source: source))
-        scene.rootNode.addChildNode(emitter)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak emitter] in
-            emitter?.removeFromParentNode()
+              let sound = NSSound(contentsOf: url, byReference: false) else {
+            NSLog("Smash Simulator: missing audio asset %@", name)
+            return
+        }
+        sound.volume = max(0, min(1, audioVolume * volume * 1.35))
+        activeImpactSounds.append(sound)
+        sound.play()
+        let lifetime = max(2.0, sound.duration + 0.5)
+        DispatchQueue.main.asyncAfter(deadline: .now() + lifetime) { [weak self, weak sound] in
+            guard let self, let sound else { return }
+            self.activeImpactSounds.removeAll { $0 === sound }
         }
     }
 
@@ -2556,14 +2588,24 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private func aimTool(at point: NSPoint) {
         guard let hit = interactiveHit(at: point) else { cursorTool.isHidden = true; return }
         cursorTool.isHidden = false
-        cursorTool.position = hit.worldCoordinates
-        cursorTool.position.y += 0.48
-        cursorTool.eulerAngles = SCNVector3(-0.62, 0.35, 0.30)
+        let n = hit.worldNormal
+        cursorTool.position = SCNVector3(hit.worldCoordinates.x + n.x * 0.30,
+                                         hit.worldCoordinates.y + n.y * 0.30,
+                                         hit.worldCoordinates.z + n.z * 0.30)
+        cursorTool.look(at: hit.worldCoordinates, up: SCNVector3(0, 1, 0), localFront: SCNVector3(0, 0, -1))
     }
     private func swingTool(at point: NSPoint) {
         aimTool(at: point)
         guard !cursorTool.isHidden else { return }
         if let hit = interactiveHit(at: point) {
+            cursorToolPivot.removeAllActions()
+            let windup = SCNAction.rotateBy(x: -0.42, y: 0.08, z: -0.20, duration: 0.075)
+            let contact = SCNAction.rotateBy(x: 0.88, y: -0.04, z: 0.38, duration: 0.105)
+            let recover = SCNAction.rotateTo(x: 0, y: 0, z: 0, duration: 0.19)
+            windup.timingMode = .easeOut
+            contact.timingMode = .easeIn
+            recover.timingMode = .easeOut
+            cursorToolPivot.runAction(SCNAction.sequence([windup, contact, recover]))
             damageScore += max(1, Int(CGFloat(damageLevel) * toolPower * 10))
             hitCount += 1
             scoreLabel?.stringValue = String(format: "SCORE %04d  •  HITS %02d", damageScore, hitCount)
