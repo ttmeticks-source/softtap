@@ -52,7 +52,7 @@ try writeTexture("carpet_woven") { rect in
         for x in stride(from: 0, to: 512, by: 4) {
             let v = pseudo(x * 37 + y * 13)
             NSColor(calibratedRed: 0.16 + v * 0.10, green: 0.17 + v * 0.10, blue: 0.18 + v * 0.11, alpha: 1).setFill()
-            NSBezierPath(rect: NSRect(x: x, y: y, width: 2.4, height: 2.4)).fill()
+            NSBezierPath(rect: NSRect(x: CGFloat(x), y: CGFloat(y), width: 2.4, height: 2.4)).fill()
         }
     }
     for y in stride(from: 1, to: 512, by: 4) {
