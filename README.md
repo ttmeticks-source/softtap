@@ -33,3 +33,6 @@ This repository builds a macOS app for GitHub Releases. It is not an Android app
 ## License
 
 MIT
+
+
+The room now uses bundled procedural plaster and woven-carpet textures. Its back wall has a framed window opening onto a grass-only exterior backdrop. Clicking the window with the cursor tool triggers the authored shard swap directly; device strikes apply a SceneKit impulse.

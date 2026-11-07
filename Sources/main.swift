@@ -358,7 +358,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     // Authored one-shot window setpiece: swap visibility, release prebuilt meshes, then clean up.
     private func makeWindowSetpiece() {
         windowHasBroken = false
-        let center = SCNVector3(0, 2.55, -1.72)
+        let center = SCNVector3(0, 2.55, -8.72)
         let frameMaterial = material(NSColor(calibratedRed: 0.12, green: 0.15, blue: 0.19, alpha: 1), roughness: 0.42)
         let frameParts: [(SCNVector3, SCNVector3)] = [
             (SCNVector3(2.62, 0.12, 0.14), SCNVector3(0, 0.86, 0)),
@@ -377,7 +377,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             scene.rootNode.addChildNode(frame)
         }
 
-        let glass = SCNNode(geometry: SCNPlane(width: 2.38, height: 1.58))
+        let glassGeometry = SCNBox(width: 2.38, height: 1.58, length: 0.045, chamferRadius: 0.008)
+        let glass = SCNNode(geometry: glassGeometry)
         glass.name = "Breakable window glass"
         glass.position = center
         let glassMaterial = SCNMaterial()
@@ -389,7 +390,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         glassMaterial.roughness.contents = 0.12
         glassMaterial.metalness.contents = 0.08
         glass.geometry?.firstMaterial = glassMaterial
-        glass.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(geometry: glass.geometry!, options: nil))
+        glass.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(geometry: glassGeometry, options: nil))
         if let body = glass.physicsBody {
             configureStaticBody(body, friction: 0.22, restitution: 0.04)
             body.contactTestBitMask = dynamicCategoryMask
@@ -523,8 +524,18 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
         // Complete the enclosure. All four walls and the ceiling have static collision shapes.
         let wallMaterial = material(wallColor(), roughness: 0.95)
+        let wallTexture = Bundle.main.url(forResource: "wall_plaster", withExtension: "png")
+        wallMaterial.diffuse.contents = wallTexture.flatMap { NSImage(contentsOf: $0) } ?? wallColor()
+        wallMaterial.diffuse.wrapS = .repeat
+        wallMaterial.diffuse.wrapT = .repeat
+        wallMaterial.diffuse.contentsTransform = SCNMatrix4MakeScale(3, 2, 1)
+
+        // Back wall has a real opening for the window; the grass backdrop sits outside it.
         let boundaries: [(String, SCNVector3, SCNVector3)] = [
-            ("Back wall", SCNVector3(20, 7, 0.22), SCNVector3(0, 3.50, -8.90)),
+            ("Back wall left", SCNVector3(8.69, 7, 0.22), SCNVector3(-5.655, 3.50, -8.90)),
+            ("Back wall right", SCNVector3(8.69, 7, 0.22), SCNVector3(5.655, 3.50, -8.90)),
+            ("Back wall below window", SCNVector3(2.62, 1.64, 0.22), SCNVector3(0, 0.82, -8.90)),
+            ("Back wall above window", SCNVector3(2.62, 3.59, 0.22), SCNVector3(0, 5.205, -8.90)),
             ("Front wall", SCNVector3(20, 7, 0.22), SCNVector3(0, 3.50, 8.90)),
             ("Left wall", SCNVector3(0.22, 7, 18), SCNVector3(-9.90, 3.50, 0)),
             ("Right wall", SCNVector3(0.22, 7, 18), SCNVector3(9.90, 3.50, 0)),
@@ -533,6 +544,34 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
         for (name, size, position) in boundaries {
             addStaticBox(name: name, size: size, position: position, surface: wallMaterial)
+        }
+
+        if let carpetURL = Bundle.main.url(forResource: "carpet_woven", withExtension: "png"),
+           let carpetImage = NSImage(contentsOf: carpetURL) {
+            let carpetMaterial = SCNMaterial()
+            carpetMaterial.diffuse.contents = carpetImage
+            carpetMaterial.diffuse.wrapS = .repeat
+            carpetMaterial.diffuse.wrapT = .repeat
+            carpetMaterial.diffuse.contentsTransform = SCNMatrix4MakeScale(8, 7, 1)
+            carpetMaterial.roughness.contents = 0.98
+            let carpet = SCNNode(geometry: SCNPlane(width: 19.8, height: 17.8))
+            carpet.name = "Woven room carpet"
+            carpet.geometry?.firstMaterial = carpetMaterial
+            carpet.eulerAngles.x = -.pi / 2
+            carpet.position = SCNVector3(0, 0.008, 0)
+            scene.rootNode.addChildNode(carpet)
+        }
+
+        if let grassURL = Bundle.main.url(forResource: "grass_outside", withExtension: "png"),
+           let grassImage = NSImage(contentsOf: grassURL) {
+            let grassMaterial = SCNMaterial()
+            grassMaterial.diffuse.contents = grassImage
+            grassMaterial.lightingModel = .constant
+            let field = SCNNode(geometry: SCNPlane(width: 16, height: 7))
+            field.name = "Grass field outside window"
+            field.geometry?.firstMaterial = grassMaterial
+            field.position = SCNVector3(0, 2.55, -9.04)
+            scene.rootNode.addChildNode(field)
         }
     }
 
@@ -888,6 +927,17 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private func swingTool(at point: NSPoint) {
         aimTool(at: point)
         guard !cursorTool.isHidden else { return }
+        if let hit = sceneView.hitTest(point, options: nil).first {
+            if hit.node.name == "Breakable window glass" || hit.node.name == "Window frame 1" ||
+                hit.node.name == "Window frame 2" || hit.node.name == "Window frame 3" || hit.node.name == "Window frame 4" {
+                breakWindow(at: hit.worldCoordinates)
+                statusLabel.stringValue = "Direct tool hit — window setpiece triggered."
+            } else if let device = deviceRoot, hit.node === device || hit.node.parent === device {
+                let direction = SCNVector3(0, 0.35, 1)
+                let power = CGFloat(5 + damageLevel * 18)
+                device.physicsBody?.applyForce(SCNVector3(direction.x * power, direction.y * power, direction.z * power), asImpulse: true)
+            }
+        }
         cursorToolPivot.removeAllActions()
         cursorToolPivot.eulerAngles = SCNVector3(-0.75, 0, -0.72)
         let down = SCNAction.rotateTo(x: 0.92, y: 0, z: 0.58, duration: 0.16, usesShortestUnitArc: true)
