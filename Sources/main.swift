@@ -58,12 +58,15 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private var deviceShellParts: [SCNNode] = []
     private var breakableComponents: [SCNNode] = []
     private var detachedDeviceParts: [SCNNode] = []
+    private var roomBreakables: [SCNNode] = []
+    private var roomPropDamage: [ObjectIdentifier: CGFloat] = [:]
     private var deskBreakablePanels: [SCNNode] = []
     private var deskPanelDamage: [ObjectIdentifier: CGFloat] = [:]
     private var devicePartDamage: [ObjectIdentifier: CGFloat] = [:]
     private var surfaceDamageMarks: [SCNNode] = []
     private var showingInternals = false
     private var damageLevel: Float = 0.72
+    private var waterEffects: [SCNNode] = []
     private var roomStyle = "Studio"
     private var statusLabel: NSTextField!
     private var devicePopup: NSPopUpButton!
@@ -135,8 +138,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         demoBadge.translatesAutoresizingMaskIntoConstraints = false
         sidebar.addSubview(demoBadge)
 
-        devicePopup = popup(["iPhone", "MacBook", "Desktop PC", "iPad", "TV"], selected: selectedDevice)
-        toolPopup = popup(["Hammer", "Rubber Mallet", "Wrench", "Screwdriver", "Flashlight", "Impact Driver", "Plastic Spudger", "Suction Cup"], selected: selectedTool)
+        devicePopup = popup(["iPhone", "MacBook", "Desktop PC", "iPad", "TV", "Smartwatch", "Digital Camera", "Game Console", "Bluetooth Speaker", "Earbuds Case"], selected: selectedDevice)
+        toolPopup = popup(["Hammer", "Sledgehammer", "Rubber Mallet", "Crowbar", "Wrench", "Screwdriver", "Drill", "Saw", "Impact Driver", "Plastic Spudger", "Suction Cup", "Fire Simulator", "Water Blaster"], selected: selectedTool)
         roomPopup = popup(["Studio", "Garage", "Concrete", "Bedroom", "Neon Lab"], selected: roomStyle)
 
         let startDemoButton = makeButton("START 3D DEMO", action: #selector(startDemo))
@@ -414,6 +417,10 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         rim.look(at: SCNVector3(0, 1.3, 0))
         scene.rootNode.addChildNode(rim)
 
+        roomBreakables.removeAll()
+        roomPropDamage.removeAll()
+        waterEffects.forEach { $0.removeFromParentNode() }
+        waterEffects.removeAll()
         makeRoom()
         makeRoomDressing()
         makeDesk()
@@ -742,9 +749,11 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         addStaticBox(name: "Front wall baseboard", size: SCNVector3(19.7, 0.16, 0.10), position: SCNVector3(0, 0.10, 8.76), surface: trim)
         addStaticBox(name: "Left wall baseboard", size: SCNVector3(0.10, 0.16, 17.7), position: SCNVector3(-9.76, 0.10, 0), surface: trim)
         addStaticBox(name: "Right wall baseboard", size: SCNVector3(0.10, 0.16, 17.7), position: SCNVector3(9.76, 0.10, 0), surface: trim)
-        addStaticBox(name: "Storage cabinet carcass", size: SCNVector3(1.75, 2.10, 0.72), position: SCNVector3(-7.75, 1.05, -5.65), surface: cabinet)
+        let cabinetBody = addStaticBox(name: "Breakable storage cabinet carcass", size: SCNVector3(1.75, 2.10, 0.72), position: SCNVector3(-7.75, 1.05, -5.65), surface: cabinet)
+        roomBreakables.append(cabinetBody)
         for x: CGFloat in [-8.18, -7.32] {
-            addStaticBox(name: "Storage cabinet door", size: SCNVector3(0.82, 1.98, 0.045), position: SCNVector3(x, 1.05, -5.265), surface: trim)
+            let door = addStaticBox(name: "Breakable cabinet door", size: SCNVector3(0.82, 1.98, 0.045), position: SCNVector3(x, 1.05, -5.265), surface: trim)
+            roomBreakables.append(door)
             let knob = SCNNode(geometry: SCNSphere(radius: 0.045))
             knob.name = "Cabinet knob"
             knob.geometry?.firstMaterial = accent
@@ -762,8 +771,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                 scene.rootNode.addChildNode(bin)
             }
         }
-        addStaticBox(name: "Workshop pegboard", size: SCNVector3(0.08, 2.65, 4.15),
-                     position: SCNVector3(9.72, 3.65, -1.45), surface: cabinet)
+        let pegboard = addStaticBox(name: "Breakable workshop pegboard", size: SCNVector3(0.08, 2.65, 4.15),
+                                    position: SCNVector3(9.72, 3.65, -1.45), surface: cabinet)
+        roomBreakables.append(pegboard)
         // Keep the pegboard as one textured panel; hundreds of tiny hole meshes
         // were expensive to render and added no meaningful interaction.
         for index in 0..<5 {
@@ -788,6 +798,39 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         practical.light?.castsShadow = false
         practical.position = SCNVector3(0, 6.75, 0)
         scene.rootNode.addChildNode(practical)
+
+        // Breakable room props: chair frame, crate stack, lamp and storage speaker.
+        let wood = material(NSColor(calibratedRed: 0.31, green: 0.19, blue: 0.11, alpha: 1), roughness: 0.84)
+        let chairSeat = addStaticBox(name: "Breakable chair seat", size: SCNVector3(1.05, 0.14, 1.02), position: SCNVector3(-5.9, 0.78, 1.4), surface: wood)
+        roomBreakables.append(chairSeat)
+        for x: CGFloat in [-6.32, -5.48] {
+            for z: CGFloat in [1.02, 1.78] {
+                let leg = addStaticBox(name: "Breakable chair leg", size: SCNVector3(0.10, 0.76, 0.10), position: SCNVector3(x, 0.38, z), surface: trim)
+                roomBreakables.append(leg)
+            }
+        }
+        let chairBack = addStaticBox(name: "Breakable chair back", size: SCNVector3(1.05, 0.92, 0.12), position: SCNVector3(-5.9, 1.30, 1.88), surface: wood)
+        roomBreakables.append(chairBack)
+        for index in 0..<3 {
+            let crate = addStaticBox(name: "Breakable storage crate \(index + 1)",
+                size: SCNVector3(0.82, 0.72, 0.78),
+                position: SCNVector3(6.6 + CGFloat(index % 2) * 0.92, 0.36 + CGFloat(index / 2) * 0.74, -5.6),
+                surface: storageBinMaterial(index))
+            roomBreakables.append(crate)
+        }
+        let speaker = addStaticBox(name: "Breakable room speaker", size: SCNVector3(0.72, 1.10, 0.54),
+                                   position: SCNVector3(7.65, 0.55, 2.1), surface: trim)
+        roomBreakables.append(speaker)
+        let lampBase = addStaticBox(name: "Breakable floor lamp base", size: SCNVector3(0.62, 0.10, 0.62),
+                                    position: SCNVector3(-7.1, 0.05, 2.4), surface: metalMaterial())
+        roomBreakables.append(lampBase)
+        let lampStem = addStaticBox(name: "Breakable floor lamp stem", size: SCNVector3(0.075, 1.85, 0.075),
+                                    position: SCNVector3(-7.1, 1.0, 2.4), surface: trim)
+        roomBreakables.append(lampStem)
+    }
+
+    private func metalMaterial() -> SCNMaterial {
+        material(NSColor(calibratedWhite: 0.48, alpha: 1), roughness: 0.30)
     }
 
     private func storageBinMaterial(_ index: Int) -> SCNMaterial {
