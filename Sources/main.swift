@@ -4,10 +4,13 @@ import QuartzCore
 
 final class SmashSceneView: SCNView {
     var onInspect: ((NSPoint) -> Void)?
+    var onAim: ((NSPoint) -> Void)?
+    var onSwing: ((NSPoint) -> Void)?
+    override func mouseMoved(with event: NSEvent) { onAim?(convert(event.locationInWindow, from: nil)) }
+    override func mouseDragged(with event: NSEvent) { onAim?(convert(event.locationInWindow, from: nil)) }
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        onInspect?(point)
-        super.mouseDown(with: event)
+        onInspect?(point); onSwing?(point); super.mouseDown(with: event)
     }
 }
 
@@ -18,6 +21,10 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private var deviceRoot: SCNNode?
     private var selectedTool = "Hammer"
     private var selectedDevice = "iPhone"
+    private var cursorTool = SCNNode()
+    private var cursorToolPivot = SCNNode()
+    private var swingSound: NSSound?
+    private var impactSound: NSSound?
     private var damageLevel: Float = 0.72
     private var roomStyle = "Studio"
     private var statusLabel: NSTextField!
@@ -83,7 +90,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
 
         devicePopup = popup(["iPhone", "MacBook", "Desktop PC", "iPad"], selected: selectedDevice)
-        toolPopup = popup(["Hammer", "Wrecking Ball", "Drop Test", "Kick"], selected: selectedTool)
+        toolPopup = popup(["Hammer", "Rubber Mallet", "Wrench", "Screwdriver", "Flashlight"], selected: selectedTool)
         roomPopup = popup(["Studio", "Garage", "Concrete", "Bedroom", "Neon Lab"], selected: roomStyle)
 
         addSection("DEVICE", control: devicePopup, to: sidebar, top: subtitle, gap: 28)
@@ -113,7 +120,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         sceneView = SmashSceneView()
         sceneView.translatesAutoresizingMaskIntoConstraints = false
         sceneView.scene = scene
-        sceneView.backgroundColor = NSColor(calibratedRed: 0.12, green: 0.15, blue: 0.20, alpha: 1)
+        sceneView.backgroundColor = NSColor(calibratedRed: 0.055, green: 0.075, blue: 0.11, alpha: 1)
         sceneView.allowsCameraControl = true
         sceneView.autoenablesDefaultLighting = true
         sceneView.antialiasingMode = .multisampling4X
@@ -125,6 +132,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         sceneView.defaultCameraController.minimumVerticalAngle = 8
         sceneView.defaultCameraController.maximumVerticalAngle = 40
         sceneView.onInspect = { [weak self] point in self?.inspectObject(at: point) }
+        sceneView.onAim = { [weak self] point in self?.aimTool(at: point) }
+        sceneView.onSwing = { [weak self] point in self?.swingTool(at: point) }
         root.addSubview(sceneView)
 
         NSLayoutConstraint.activate([
@@ -238,23 +247,40 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         scene.rootNode.addChildNode(camera)
         sceneView.pointOfView = camera
 
+        scene.background.contents = NSColor(calibratedRed: 0.035, green: 0.052, blue: 0.082, alpha: 1)
+        scene.fogColor = NSColor(calibratedRed: 0.12, green: 0.16, blue: 0.22, alpha: 1)
+        scene.fogStartDistance = 12
+        scene.fogEndDistance = 30
+        scene.fogDensityExponent = 1.25
         let ambient = SCNNode()
         ambient.light = SCNLight()
         ambient.light?.type = .ambient
-        ambient.light?.intensity = 480
+        ambient.light?.intensity = 260
         scene.rootNode.addChildNode(ambient)
-
         let key = SCNNode()
         key.light = SCNLight()
-        key.light?.type = .omni
-        key.light?.intensity = 1100
-        key.position = SCNVector3(-3, 6, 5)
+        key.light?.type = .spot
+        key.light?.intensity = 1550
+        key.light?.spotInnerAngle = 48
+        key.light?.spotOuterAngle = 78
+        key.light?.castsShadow = true
+        key.position = SCNVector3(-3.2, 6.2, 4.6)
+        key.look(at: SCNVector3(0, 1.0, 0))
         scene.rootNode.addChildNode(key)
+        let fill = SCNNode()
+        fill.light = SCNLight()
+        fill.light?.type = .omni
+        fill.light?.intensity = 420
+        fill.light?.color = NSColor(calibratedRed: 0.45, green: 0.66, blue: 1, alpha: 1)
+        fill.position = SCNVector3(4.2, 3.1, -3.8)
+        scene.rootNode.addChildNode(fill)
 
         makeRoom()
         makeDesk()
         makeDevice()
         makePhysicsProps()
+        makeCursorTool()
+        prepareAudio()
     }
 
     // Centralized SceneKit world tuning. A smaller fixed simulation step improves
@@ -644,7 +670,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
     @objc private func toolChanged(_ sender: NSPopUpButton) {
         selectedTool = sender.titleOfSelectedItem ?? "Hammer"
-        statusLabel.stringValue = "Tool selected: \(selectedTool)."
+        rebuildCursorTool()
+        statusLabel.stringValue = "Cursor tool selected. Move over the scene and click to swing."
     }
 
     @objc private func roomChanged(_ sender: NSPopUpButton) {
@@ -655,42 +682,72 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
     @objc private func damageChanged(_ sender: NSSlider) { damageLevel = Float(sender.floatValue) }
 
-    @objc private func strike() {
-        guard let target = deviceRoot, let body = target.physicsBody else { return }
-        let force = CGFloat(18 + 72 * damageLevel)
-        switch selectedTool {
-        case "Wrecking Ball":
-            let ball = SCNNode(geometry: SCNSphere(radius: 0.48))
-            ball.geometry?.firstMaterial = material(NSColor(calibratedWhite: 0.22, alpha: 1), roughness: 0.22)
-            ball.position = SCNVector3(-2.8, 2.5, 1.4)
-            ball.physicsBody = SCNPhysicsBody(type: .dynamic, shape: nil)
-            if let ballBody = ball.physicsBody {
-                configureDynamicBody(ballBody, mass: 12, friction: 0.68, restitution: 0.025, angularDamping: 0.24)
-            }
-            scene.rootNode.addChildNode(ball)
-            ball.physicsBody?.applyForce(SCNVector3(28, -7, -12), asImpulse: true)
-        case "Drop Test":
-            target.position = SCNVector3(0, 4.5, 0)
-            body.velocity = SCNVector3Zero
-            body.angularVelocity = SCNVector4Zero
-        case "Kick":
-            body.applyForce(SCNVector3(0, 2, -Float(force)), asImpulse: true)
-            body.applyTorque(SCNVector4(7, 2, 1, 5), asImpulse: true)
-        default:
-            body.applyForce(SCNVector3(0, Float(force) * 0.48, -Float(force)), asImpulse: true)
-            body.applyTorque(SCNVector4(2, 1, 0, CGFloat(force) * 0.035), asImpulse: true)
-        }
-        addImpactMark()
-        statusLabel.stringValue = "\(selectedTool) applied — simulated physics and cosmetic impact effects."
+    private func prepareAudio() {
+        swingSound = NSSound(contentsOfFile: "/System/Library/Sounds/Pop.aiff", byReference: true)
+        impactSound = NSSound(contentsOfFile: "/System/Library/Sounds/Glass.aiff", byReference: true)
     }
-
-    private func addImpactMark() {
-        guard let target = deviceRoot else { return }
-        let crack = SCNNode(geometry: SCNCylinder(radius: CGFloat(0.025 + damageLevel * 0.055), height: 0.012))
-        crack.geometry?.firstMaterial = material(NSColor(calibratedWhite: 0.78, alpha: 1), roughness: 0.2)
-        crack.position = SCNVector3(Float.random(in: -0.35...0.35), 0.36, 0.12)
-        crack.eulerAngles.x = .pi / 2
-        target.addChildNode(crack)
+    private func play(_ sound: NSSound?) { sound?.stop(); sound?.play() }
+    private func makeCursorTool() {
+        cursorTool = SCNNode()
+        cursorTool.name = "Cursor tool"
+        cursorToolPivot = SCNNode()
+        cursorToolPivot.name = "Swing pivot"
+        cursorTool.addChildNode(cursorToolPivot)
+        rebuildCursorTool()
+        scene.rootNode.addChildNode(cursorTool)
+    }
+    private func rebuildCursorTool() {
+        cursorToolPivot.childNodes.forEach { $0.removeFromParentNode() }
+        let metal = material(NSColor(calibratedWhite: 0.68, alpha: 1), roughness: 0.3)
+        let handle = SCNNode(geometry: SCNCylinder(radius: 0.045, height: 0.72))
+        handle.geometry?.firstMaterial = material(NSColor(calibratedRed: 0.32, green: 0.18, blue: 0.10, alpha: 1), roughness: 0.6)
+        handle.position = SCNVector3(0, -0.27, 0)
+        cursorToolPivot.addChildNode(handle)
+        let head: SCNNode
+        switch selectedTool {
+        case "Rubber Mallet":
+            head = SCNNode(geometry: SCNCylinder(radius: 0.14, height: 0.42))
+            head.eulerAngles.z = .pi / 2
+            head.geometry?.firstMaterial = material(NSColor.darkGray, roughness: 0.8)
+        case "Wrench":
+            head = SCNNode(geometry: SCNTorus(ringRadius: 0.12, pipeRadius: 0.035))
+            head.geometry?.firstMaterial = metal
+        case "Screwdriver":
+            head = SCNNode(geometry: SCNBox(width: 0.075, height: 0.30, length: 0.075, chamferRadius: 0.02))
+            head.geometry?.firstMaterial = metal
+        case "Flashlight":
+            head = SCNNode(geometry: SCNCylinder(radius: 0.13, height: 0.30))
+            head.geometry?.firstMaterial = metal
+        default:
+            head = SCNNode(geometry: SCNBox(width: 0.42, height: 0.18, length: 0.18, chamferRadius: 0.04))
+            head.geometry?.firstMaterial = metal
+        }
+        head.position = SCNVector3(0, 0.13, 0)
+        cursorToolPivot.addChildNode(head)
+        cursorTool.isHidden = true
+    }
+    private func aimTool(at point: NSPoint) {
+        guard let hit = sceneView.hitTest(point, options: nil).first else { cursorTool.isHidden = true; return }
+        cursorTool.isHidden = false
+        cursorTool.position = hit.worldCoordinates
+        cursorTool.position.y += 0.48
+        cursorTool.eulerAngles = SCNVector3(-0.62, 0.35, 0.30)
+    }
+    private func swingTool(at point: NSPoint) {
+        aimTool(at: point)
+        guard !cursorTool.isHidden else { return }
+        cursorToolPivot.removeAllActions()
+        cursorToolPivot.eulerAngles = SCNVector3(-0.75, 0, -0.72)
+        let down = SCNAction.rotateTo(x: 0.92, y: 0, z: 0.58, duration: 0.16, usesShortestUnitArc: true)
+        down.timingMode = .easeOut
+        let up = SCNAction.rotateTo(x: -0.75, y: 0, z: -0.72, duration: 0.22, usesShortestUnitArc: true)
+        up.timingMode = .easeInEaseOut
+        cursorToolPivot.runAction(.sequence([down, up]))
+        play(swingSound)
+        statusLabel.stringValue = "Swing animation: " + selectedTool + " · virtual prop only."
+    }
+    @objc private func strike() {
+        swingTool(at: NSPoint(x: sceneView.bounds.midX, y: sceneView.bounds.midY))
     }
 
     @objc private func dropObject() {
