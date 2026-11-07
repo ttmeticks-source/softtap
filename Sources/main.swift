@@ -17,7 +17,7 @@ final class SmashSceneView: SCNView {
         if let tracking { removeTrackingArea(tracking) }
         let area = NSTrackingArea(
             rect: .zero,
-            options: [.mouseMoved, .mouseDragged, .activeInKeyWindow, .inVisibleRect],
+            options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect],
             owner: self,
             userInfo: nil
         )
@@ -75,7 +75,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private var deviceRoot: SCNNode?
     private var selectedTool = "Precision Hammer"
     private var selectedDevice = "iPhone"
-    private var damageLevel: Float = 0.72
+    private var damageLevel: CGFloat = 0.72
     private var roomStyle = "Studio"
     private var statusLabel: NSTextField!
     private var devicePopup: NSPopUpButton!
@@ -84,13 +84,15 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private var damageSlider: NSSlider!
     private var cursorToolNode: SCNNode?
     private var cameraNode: SCNNode?
-    private var cameraYaw: Float = 0
-    private var cameraPitch: Float = 0.27
-    private var cameraDistance: Float = 9.2
+    private var cameraYaw: CGFloat = 0
+    private var cameraPitch: CGFloat = 0.27
+    private var cameraDistance: CGFloat = 9.2
     private var lastImpactSoundTime: TimeInterval = 0
     private var debrisCount = 0
-    private let deskTopY: Float = 1.28
-    private let toolPower: [String: Float] = [
+    private var damageKinds: [ObjectIdentifier: String] = [:]
+    private var debrisBirthTimes: [ObjectIdentifier: TimeInterval] = [:]
+    private let deskTopY: CGFloat = 1.28
+    private let toolPower: [String: CGFloat] = [
         "Soft Tap": 0.38,
         "Rubber Mallet": 0.62,
         "Precision Hammer": 1.0,
@@ -196,7 +198,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         sceneView.rendersContinuously = true
         sceneView.delegate = self
         sceneView.onPointerMove = { [weak self] point in self?.moveCursorTool(to: point) }
-        sceneView.onPointerClick = { [weak self] point, held in self?.applyTool(at: point, heldFor: held) }
+        sceneView.onPointerClick = { [weak self] point, held in self?.applySelectedTool(at: point, heldFor: held) }
         sceneView.onOrbit = { [weak self] dx, dy in self?.orbitCamera(dx: dx, dy: dy) }
         sceneView.onZoom = { [weak self] delta in self?.zoomCamera(delta: delta) }
         root.addSubview(sceneView)
@@ -318,10 +320,19 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         cursorToolNode = tool
     }
 
+    private func isCursorToolNode(_ node: SCNNode) -> Bool {
+        var current: SCNNode? = node
+        while let candidate = current {
+            if candidate === cursorToolNode { return true }
+            current = candidate.parent
+        }
+        return false
+    }
+
     private func damageableOwner(for node: SCNNode) -> SCNNode? {
         var current: SCNNode? = node
         while let candidate = current {
-            if candidate.userData?["damageKind"] as? String != nil { return candidate }
+            if damageKinds[ObjectIdentifier(candidate)] != nil { return candidate }
             current = candidate.parent
         }
         return nil
@@ -330,7 +341,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private func moveCursorTool(to point: NSPoint) {
         guard let cursorToolNode else { return }
         let hits = sceneView.hitTest(point, options: nil)
-        if let hit = hits.first(where: { !($0.node.name ?? "").hasPrefix("Cursor Tool") }) {
+        if let hit = hits.first(where: { !isCursorToolNode($0.node) }) {
             let normal = hit.worldNormal
             cursorToolNode.position = SCNVector3(
                 hit.worldCoordinates.x + normal.x * 0.30,
@@ -342,14 +353,12 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             let far = sceneView.unprojectPoint(SCNVector3(Float(point.x), Float(point.y), 1))
             let direction = SCNVector3(far.x - near.x, far.y - near.y, far.z - near.z)
             if abs(direction.y) > 0.0001 {
-                let planeY = deskTopY + 0.85
-                let t = (planeY - near.y) / direction.y
-                if t >= 0 {
-                    cursorToolNode.position = SCNVector3(
-                        min(8.0, max(-8.0, near.x + direction.x * t)),
-                        planeY,
-                        min(7.6, max(-7.6, near.z + direction.z * t))
-                    )
+                let planeY: CGFloat = deskTopY + 0.85
+                let rayDistance: CGFloat = (planeY - near.y) / direction.y
+                if rayDistance >= 0 {
+                    let targetX: CGFloat = min(8.0, max(-8.0, near.x + direction.x * rayDistance))
+                    let targetZ: CGFloat = min(7.6, max(-7.6, near.z + direction.z * rayDistance))
+                    cursorToolNode.position = SCNVector3(targetX, planeY, targetZ)
                 }
             }
         }
@@ -358,14 +367,14 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private func animateToolImpact(intensity: Float) {
         guard let cursorToolNode else { return }
         cursorToolNode.removeAllActions()
-        let wobble = min(0.42, 0.10 + Double(intensity) * 0.14)
+        let wobble: CGFloat = min(0.42, 0.10 + intensity * 0.14)
         cursorToolNode.runAction(.sequence([
             .group([
-                .moveBy(x: 0, y: -CGFloat(0.12 + intensity * 0.08), z: 0, duration: 0.045),
+                .moveBy(x: 0, y: -(0.12 + intensity * 0.08), z: 0, duration: 0.045),
                 .rotateBy(x: 0, y: 0, z: wobble, duration: 0.055)
             ]),
             .group([
-                .moveBy(x: 0, y: CGFloat(0.12 + intensity * 0.08), z: 0, duration: 0.09),
+                .moveBy(x: 0, y: (0.12 + intensity * 0.08), z: 0, duration: 0.09),
                 .rotateBy(x: 0, y: 0, z: -wobble * 0.78, duration: 0.10)
             ])
         ]))
@@ -382,9 +391,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
         moveCursorTool(to: point)
         // Assumption: hold duration controls the arcade intensity; pointer velocity is ignored.
-        let holdFactor = Float(min(1.0, max(0.0, heldFor / 0.85)))
-        let clickIntensity = 0.38 + holdFactor * 0.82
-        let intensity = (toolPower[selectedTool] ?? 1.0) * damageLevel * clickIntensity
+        let holdFactor = CGFloat(min(1.0, max(0.0, heldFor / 0.85)))
+        let clickIntensity: CGFloat = 0.38 + holdFactor * 0.82
+        let intensity: CGFloat = (toolPower[selectedTool] ?? 1.0) * damageLevel * clickIntensity
         animateToolImpact(intensity: intensity)
 
         let worldPoint = hit.worldCoordinates
@@ -398,11 +407,10 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
         if let dynamicBody = nearestDynamicBody(from: hit.node) {
             let applicationPoint = dynamicBody.convertPosition(worldPoint, from: nil)
-            let impulse = SCNVector3(
-                worldNormal.x * intensity * 3.2,
-                worldNormal.y * intensity * 3.2 + intensity * 0.45,
-                worldNormal.z * intensity * 3.2
-            )
+            let impulseX: CGFloat = worldNormal.x * intensity * 3.2
+            let impulseY: CGFloat = worldNormal.y * intensity * 3.2 + intensity * 0.45
+            let impulseZ: CGFloat = worldNormal.z * intensity * 3.2
+            let impulse = SCNVector3(impulseX, impulseY, impulseZ)
             dynamicBody.physicsBody?.applyForce(impulse, at: applicationPoint, asImpulse: true)
         }
 
@@ -457,22 +465,30 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         var data = source.data
         let stride = source.dataStride
         let offset = source.dataOffset
-        data.withUnsafeMutableBytes { raw in
+        let pointX = Float(point.x)
+        let pointY = Float(point.y)
+        let pointZ = Float(point.z)
+        let normalX = Float(normal.x)
+        let normalY = Float(normal.y)
+        let normalZ = Float(normal.z)
+        let radiusValue = Float(radius)
+        let depthValue = Float(depth)
+        data.withUnsafeMutableBytes { (raw: UnsafeMutableRawBufferPointer) -> Void in
             guard let base = raw.baseAddress else { return }
             let values = base.assumingMemoryBound(to: Float.self)
             for index in 0..<source.vectorCount {
                 let start = (offset + index * stride) / MemoryLayout<Float>.size
-                let dx = CGFloat(values[start] - point.x)
-                let dy = CGFloat(values[start + 1] - point.y)
-                let dz = CGFloat(values[start + 2] - point.z)
+                let dx = values[start] - pointX
+                let dy = values[start + 1] - pointY
+                let dz = values[start + 2] - pointZ
                 let distance = sqrt(dx * dx + dy * dy + dz * dz)
-                guard distance < radius else { continue }
-                let falloff = 1.0 - distance / radius
-                let centerWeight = falloff * falloff
-                let amount = Float(depth * centerWeight)
-                values[start] -= normal.x * amount
-                values[start + 1] -= normal.y * amount
-                values[start + 2] -= normal.z * amount
+                if distance < radiusValue {
+                    let falloff = 1.0 - distance / radiusValue
+                    let amount = depthValue * falloff * falloff
+                    values[start] -= normalX * amount
+                    values[start + 1] -= normalY * amount
+                    values[start + 2] -= normalZ * amount
+                }
             }
         }
 
@@ -517,13 +533,13 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             chip.position = point
             configureDebris(chip, mass: 0.025 + CGFloat(intensity) * 0.012)
             scene.rootNode.addChildNode(chip)
-            let random = SCNVector3(Float.random(in: -1...1), Float.random(in: 0.2...1.2), Float.random(in: -1...1))
-            chip.physicsBody?.applyForce(SCNVector3(
-                (normal.x * 0.65 + random.x * 0.8) * intensity * 2.0,
-                (normal.y * 0.65 + random.y * 0.8) * intensity * 2.0,
-                (normal.z * 0.65 + random.z * 0.8) * intensity * 2.0
-            ), asImpulse: true)
-            chip.physicsBody?.applyTorque(SCNVector4(random.x, random.y, random.z, Float.random(in: 0.8...2.8)), asImpulse: true)
+            let random = SCNVector3(CGCGFloat.random(in: -1...1), CGFloat.random(in: 0.2...1.2), CGFloat.random(in: -1...1))
+            let forceX: CGFloat = (normal.x * 0.65 + random.x * 0.8) * intensity * 2.0
+            let forceY: CGFloat = (normal.y * 0.65 + random.y * 0.8) * intensity * 2.0
+            let forceZ: CGFloat = (normal.z * 0.65 + random.z * 0.8) * intensity * 2.0
+            chip.physicsBody?.applyForce(SCNVector3(forceX, forceY, forceZ), asImpulse: true)
+            let spin = CGFloat.random(in: 0.8...2.8)
+            chip.physicsBody?.applyTorque(SCNVector4(random.x, random.y, random.z, spin), asImpulse: true)
         }
     }
 
@@ -542,27 +558,27 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         for column in 0..<columns {
             for row in 0..<rows {
                 let shard = SCNNode(geometry: SCNBox(
-                    width: CGFloat(span.x / 2.2 * Float.random(in: 0.72...1.10)),
-                    height: CGFloat(span.y / 2.0 * Float.random(in: 0.72...1.10)),
-                    length: CGFloat(span.z / 2.2 * Float.random(in: 0.72...1.10)),
+                    width: span.x / 2.2 * CGFloat.random(in: 0.72...1.10),
+                    height: span.y / 2.0 * CGFloat.random(in: 0.72...1.10),
+                    length: span.z / 2.2 * CGFloat.random(in: 0.72...1.10),
                     chamferRadius: 0.012
                 ))
                 shard.name = "Detached arcade fragment"
                 shard.geometry?.firstMaterial = material(color, roughness: 0.55, metalness: 0.35)
                 shard.position = SCNVector3(
-                    point.x + (Float(column) - 0.5) * span.x * 0.22 + Float.random(in: -0.05...0.05),
-                    point.y + (Float(row) - 0.5) * span.y * 0.22 + Float.random(in: -0.05...0.05),
-                    point.z + Float.random(in: -0.07...0.07)
+                    point.x + (CGFloat(column) - 0.5) * span.x * 0.22 + CGFloat.random(in: -0.05...0.05),
+                    point.y + (CGFloat(row) - 0.5) * span.y * 0.22 + CGFloat.random(in: -0.05...0.05),
+                    point.z + CGFloat.random(in: -0.07...0.07)
                 )
                 configureDebris(shard, mass: 0.10 + CGFloat(intensity) * 0.025)
                 scene.rootNode.addChildNode(shard)
-                let random = SCNVector3(Float.random(in: -1...1), Float.random(in: 0.25...1.2), Float.random(in: -1...1))
-                shard.physicsBody?.applyForce(SCNVector3(
-                    (normal.x + random.x * 0.75) * intensity * 2.8,
-                    (normal.y + random.y * 0.8) * intensity * 2.8,
-                    (normal.z + random.z * 0.75) * intensity * 2.8
-                ), asImpulse: true)
-                shard.physicsBody?.applyTorque(SCNVector4(random.x, random.y, random.z, Float.random(in: 1.0...3.5)), asImpulse: true)
+                let random = SCNVector3(CGFloat.random(in: -1...1), CGFloat.random(in: 0.25...1.2), CGFloat.random(in: -1...1))
+                let forceX: CGFloat = (normal.x + random.x * 0.75) * intensity * 2.8
+                let forceY: CGFloat = (normal.y + random.y * 0.8) * intensity * 2.8
+                let forceZ: CGFloat = (normal.z + random.z * 0.75) * intensity * 2.8
+                shard.physicsBody?.applyForce(SCNVector3(forceX, forceY, forceZ), asImpulse: true)
+                let spin = CGFloat.random(in: 1.0...3.5)
+                shard.physicsBody?.applyTorque(SCNVector4(random.x, random.y, random.z, spin), asImpulse: true)
             }
         }
     }
@@ -576,18 +592,19 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                 let plank = SCNNode(geometry: SCNBox(width: 1.85, height: 0.20, length: 1.47, chamferRadius: 0.025))
                 plank.name = "Detached workbench plank"
                 plank.geometry?.firstMaterial = material(NSColor(calibratedRed: 0.31, green: 0.20, blue: 0.13, alpha: 1), roughness: 0.82)
-                plank.position = SCNVector3(origin.x + (Float(column) - 1.5) * 1.9,
-                                             origin.y + Float.random(in: -0.03...0.06),
-                                             origin.z + (Float(row) - 1) * 1.50)
+                let plankX = origin.x + (CGFloat(column) - 1.5) * 1.9
+                let plankY = origin.y + CGFloat.random(in: -0.03...0.06)
+                let plankZ = origin.z + (CGFloat(row) - 1) * 1.50
+                plank.position = SCNVector3(plankX, plankY, plankZ)
                 configureDebris(plank, mass: 0.65)
                 scene.rootNode.addChildNode(plank)
                 let away = SCNVector3(plank.position.x - point.x, 0, plank.position.z - point.z)
-                plank.physicsBody?.applyForce(SCNVector3(
-                    away.x * 0.8 + normal.x * intensity,
-                    intensity * 0.75,
-                    away.z * 0.8 + normal.z * intensity
-                ), asImpulse: true)
-                plank.physicsBody?.applyTorque(SCNVector4(Float.random(in: -1...1), Float.random(in: -1...1), Float.random(in: -1...1), 2.2), asImpulse: true)
+                let forceX: CGFloat = away.x * 0.8 + normal.x * intensity
+                let forceY: CGFloat = intensity * 0.75
+                let forceZ: CGFloat = away.z * 0.8 + normal.z * intensity
+                plank.physicsBody?.applyForce(SCNVector3(forceX, forceY, forceZ), asImpulse: true)
+                let torque = SCNVector4(CGFloat.random(in: -1...1), CGFloat.random(in: -1...1), CGFloat.random(in: -1...1), 2.2)
+                plank.physicsBody?.applyTorque(torque, asImpulse: true)
             }
         }
     }
@@ -598,33 +615,33 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         node.physicsBody?.mass = mass
         node.physicsBody?.friction = 0.68
         node.physicsBody?.restitution = 0.28
-        node.physicsBody?.linearDamping = 0.05
+        node.physicsBody?.damping = 0.05
         node.physicsBody?.angularDamping = 0.12
         node.physicsBody?.collisionBitMask = -1
         node.physicsBody?.contactTestBitMask = -1
-        if node.userData == nil { node.userData = NSMutableDictionary() }
-        node.userData?["debrisBorn"] = CACurrentMediaTime()
+        debrisBirthTimes[ObjectIdentifier(node)] = CACurrentMediaTime()
         debrisCount += 1
     }
 
     private func orbitCamera(dx: CGFloat, dy: CGFloat) {
-        cameraYaw = min(0.78, max(-0.78, cameraYaw - Float(dx) * 0.004))
-        cameraPitch = min(0.52, max(0.10, cameraPitch + Float(dy) * 0.003))
+        cameraYaw = min(0.78, max(-0.78, cameraYaw - dx * 0.004))
+        cameraPitch = min(0.52, max(0.10, cameraPitch + dy * 0.003))
         updateCamera()
     }
 
     private func zoomCamera(delta: CGFloat) {
-        cameraDistance = min(12.2, max(7.6, cameraDistance - Float(delta) * 0.012))
+        cameraDistance = min(12.2, max(7.6, cameraDistance - delta * 0.012))
         updateCamera()
     }
 
     private func updateCamera() {
         guard let cameraNode else { return }
         let target = SCNVector3(0, 1.38, 0)
-        let horizontal = cameraDistance * cos(cameraPitch)
-        cameraNode.position = SCNVector3(sin(cameraYaw) * horizontal,
-                                         target.y + sin(cameraPitch) * cameraDistance,
-                                         cos(cameraYaw) * horizontal)
+        let horizontal = cameraDistance * CGFloat(cos(Double(cameraPitch)))
+        let cameraX = CGFloat(sin(Double(cameraYaw))) * horizontal
+        let cameraY = target.y + CGFloat(sin(Double(cameraPitch))) * cameraDistance
+        let cameraZ = CGFloat(cos(Double(cameraYaw))) * horizontal
+        cameraNode.position = SCNVector3(cameraX, cameraY, cameraZ)
         cameraNode.look(at: target)
     }
 
@@ -641,7 +658,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         }
     }
 
-    private func playImpactSound(intensity: Float) {
+    private func playImpactSound(intensity: CGFloat) {
         guard let format = audioFormat,
               let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 8820),
               let channel = buffer.floatChannelData?[0] else { return }
@@ -668,11 +685,15 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
     func renderer(_ renderer: SCNSceneRenderer, didSimulatePhysicsAtTime time: TimeInterval) {
         let now = CACurrentMediaTime()
-        let expired = scene.rootNode.childNodes.filter { node in
-            guard let born = node.userData?["debrisBorn"] as? Double else { return false }
-            return now - born > 11 || node.presentation.worldPosition.y < -2
+        var expired: [SCNNode] = []
+        for node in scene.rootNode.childNodes {
+            if let born = debrisBirthTimes[ObjectIdentifier(node)],
+               (now - born > 11 || node.presentation.worldPosition.y < -2) {
+                expired.append(node)
+            }
         }
         for node in expired {
+            debrisBirthTimes.removeValue(forKey: ObjectIdentifier(node))
             node.removeFromParentNode()
             debrisCount = max(0, debrisCount - 1)
         }
@@ -713,6 +734,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
     private func buildScene() {
         debrisCount = 0
+        damageKinds.removeAll()
+        debrisBirthTimes.removeAll()
         cameraYaw = 0
         cameraPitch = 0.27
         cameraDistance = 9.2
@@ -748,8 +771,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     }
 
     private func tag(_ node: SCNNode, kind: String) {
-        if node.userData == nil { node.userData = NSMutableDictionary() }
-        node.userData?["damageKind"] = kind
+        damageKinds[ObjectIdentifier(node)] = kind
     }
 
     private func tagSubtree(_ node: SCNNode, kind: String) {
@@ -1008,7 +1030,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         statusLabel.stringValue = "Room changed to \(roomStyle)."
     }
 
-    @objc private func damageChanged(_ sender: NSSlider) { damageLevel = Float(sender.floatValue) }
+    @objc private func damageChanged(_ sender: NSSlider) { damageLevel = CGFloat(sender.floatValue) }
 
     @objc private func strike() {
         let center = NSPoint(x: sceneView.bounds.midX, y: sceneView.bounds.midY)
@@ -1020,7 +1042,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         target.position = SCNVector3(0, deskTopY + 4.0, 0)
         target.physicsBody?.velocity = SCNVector3Zero
         target.physicsBody?.angularVelocity = SCNVector4Zero
-        target.physicsBody?.applyForce(SCNVector3(Float.random(in: -3...3), 0, Float.random(in: -2...2)), asImpulse: true)
+        target.physicsBody?.applyForce(SCNVector3(CGFloat.random(in: -3...3), 0, CGFloat.random(in: -2...2)), asImpulse: true)
         statusLabel.stringValue = "Drop test started. The object will fall onto the room floor."
     }
 
