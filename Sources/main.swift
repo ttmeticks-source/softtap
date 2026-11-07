@@ -1749,18 +1749,37 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         surfaceDamageMarks.append(mark)
     }
 
-    // Material response is intentionally separated from the hit tool's force:
-    // lower stiffness means less permanent dent depth for the same contact energy.
-    private func deformationStiffness(for part: SCNNode) -> CGFloat {
+    private struct MaterialDeformationProfile {
+        let stiffness: CGFloat
+        let yield: CGFloat
+        let springback: CGFloat
+        let grainAnisotropy: CGFloat
+    }
+
+    // Tuned as an on-screen response model, not measured engineering data.
+    // Yield controls when permanent mesh deformation begins; springback controls
+    // how much of the contact response is elastic rather than retained.
+    private func deformationProfile(for part: SCNNode) -> MaterialDeformationProfile {
         let identity = (part.name ?? "").lowercased()
-        if identity.contains("glass") || identity.contains("screen") || identity.contains("display") { return 0.42 }
-        if identity.contains("steel") || identity.contains("hinge") || identity.contains("frame") || identity.contains("bracket") { return 0.34 }
-        if identity.contains("aluminium") || identity.contains("aluminum") || identity.contains("metal") || identity.contains("shield") { return 0.52 }
-        if identity.contains("rubber") || identity.contains("gasket") || identity.contains("grip") { return 1.18 }
-        if identity.contains("plastic") || identity.contains("case") || identity.contains("cover") || identity.contains("shell") { return 1.0 }
-        // Unknown parts use a conservative polymer-like response rather than
-        // pretending every component is made from the same material.
-        return 0.82
+        if identity.contains("glass") || identity.contains("screen") || identity.contains("display") {
+            return .init(stiffness: 0.42, yield: 0.08, springback: 0.02, grainAnisotropy: 1.0)
+        }
+        if identity.contains("steel") || identity.contains("hinge") || identity.contains("bracket") {
+            return .init(stiffness: 0.34, yield: 0.62, springback: 0.84, grainAnisotropy: 1.0)
+        }
+        if identity.contains("aluminium") || identity.contains("aluminum") || identity.contains("metal") || identity.contains("shield") || identity.contains("frame") {
+            return .init(stiffness: 0.52, yield: 0.24, springback: 0.22, grainAnisotropy: 1.0)
+        }
+        if identity.contains("wood") || identity.contains("cabinet") || identity.contains("shelf") || identity.contains("desk") || identity.contains("crate") {
+            return .init(stiffness: 0.76, yield: 0.16, springback: 0.04, grainAnisotropy: 1.65)
+        }
+        if identity.contains("rubber") || identity.contains("gasket") || identity.contains("grip") {
+            return .init(stiffness: 1.18, yield: 0.12, springback: 0.72, grainAnisotropy: 1.0)
+        }
+        if identity.contains("plastic") || identity.contains("case") || identity.contains("cover") || identity.contains("shell") {
+            return .init(stiffness: 1.0, yield: 0.12, springback: 0.09, grainAnisotropy: 1.0)
+        }
+        return .init(stiffness: 0.82, yield: 0.20, springback: 0.16, grainAnisotropy: 1.0)
     }
 
     // Subdivide a struck box and indent the vertices around the impact point.
@@ -1786,9 +1805,14 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         let center = SCNVector3((bounds.min.x + bounds.max.x) * 0.5, (bounds.min.y + bounds.max.y) * 0.5, (bounds.min.z + bounds.max.z) * 0.5)
         let sx = bounds.max.x - bounds.min.x, sy = bounds.max.y - bounds.min.y, sz = bounds.max.z - bounds.min.z
         let tangent = max(0.10, min(sx, max(sy, sz)))
-        let radius = max(0.11, tangent * 0.38)
-        let stiffness = deformationStiffness(for: part)
-        let depth = min(0.20, max(0.018, tangent * 0.105)) * min(2.0, max(0.45, intensity)) * stiffness
+        let profile = deformationProfile(for: part)
+        // A broad falloff makes the surrounding panel bow and flex with the
+        // impact instead of producing an isolated pin-sized indentation.
+        let radius = max(0.14, tangent * 0.62)
+        let yieldedLoad = max(0.04, intensity - profile.yield)
+        let retainedLoad = yieldedLoad * (1.0 - profile.springback)
+        let depth = min(0.24, max(0.014, tangent * 0.12)) *
+                    min(2.2, max(0.30, retainedLoad)) * profile.stiffness
         var vertices = [SCNVector3]()
         vertices.reserveCapacity(source.vectorCount)
         source.data.withUnsafeBytes { raw in
@@ -1810,11 +1834,27 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             let along = dx * normal.x + dy * normal.y + dz * normal.z
             let rx = dx - normal.x * along, ry = dy - normal.y * along, rz = dz - normal.z * along
             let radial = sqrt(rx * rx + ry * ry + rz * rz)
-            if facing > 0 && radial < radius * 2.2 {
-                let bowl = exp(-pow(radial / radius, 2) * 2.1)
-                let lip = exp(-pow((radial - radius * 1.12) / (radius * 0.22), 2)) * 0.20
-                let push = depth * (bowl - lip)
-                vertices[i] = SCNVector3(v.x - normal.x * push, v.y - normal.y * push, v.z - normal.z * push)
+            // Wood responds anisotropically: the deformation spreads farther
+            // along a notional local grain axis and narrows across it.
+            let effectiveRadial: CGFloat
+            if profile.grainAnisotropy > 1.0 {
+                let grainAlong = dx
+                let grainAcross = sqrt(max(0, radial * radial - grainAlong * grainAlong))
+                effectiveRadial = sqrt(pow(grainAlong / profile.grainAnisotropy, 2) +
+                                       pow(grainAcross * profile.grainAnisotropy, 2))
+            } else {
+                effectiveRadial = radial
+            }
+            if facing > 0 && effectiveRadial < radius * 2.2 {
+                let falloff = exp(-pow(effectiveRadial / radius, 2) * 1.55)
+                let shoulder = exp(-pow((effectiveRadial - radius * 1.18) / (radius * 0.30), 2)) * 0.16
+                let push = depth * (falloff - shoulder)
+                // A small tangential component makes the surrounding mesh roll
+                // into the impact rather than translating only along the normal.
+                let grainRoll = profile.grainAnisotropy > 1.0 ? min(0.018, push * 0.16) : 0
+                vertices[i] = SCNVector3(v.x - normal.x * push + grainRoll,
+                                         v.y - normal.y * push,
+                                         v.z - normal.z * push)
                 changed = true
             }
         }
@@ -1872,8 +1912,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         devicePartDamage[key] = accumulated
         deformImpactMesh(part, worldPoint: point, worldNormal: normal, intensity: intensity)
         // Permanent progressive flex: the shell visibly kinks and stays bent between hits.
-        let stiffness = deformationStiffness(for: part)
-        let bend = min(0.045, intensity * 0.0045) * stiffness
+        let profile = deformationProfile(for: part)
+        let elasticLoad = max(0.0, intensity - profile.yield) * profile.springback
+        let bend = min(0.045, (intensity * 0.0045 + elasticLoad * 0.002)) * profile.stiffness
         part.eulerAngles.x += normal.z * bend
         part.eulerAngles.z += normal.x * bend * CGFloat.random(in: 0.7...1.3)
         // A short elastic rebound rides on top of the persistent mesh dent.
