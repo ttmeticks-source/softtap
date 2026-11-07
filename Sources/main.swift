@@ -71,6 +71,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private var activeFireEffects: [SCNNode] = []
     private var roomStyle = "Studio"
     private var statusLabel: NSTextField!
+    private var scoreLabel: NSTextField!
+    private var damageScore = 0
+    private var hitCount = 0
     private var devicePopup: NSPopUpButton!
     private var toolPopup: NSPopUpButton!
     private var roomPopup: NSPopUpButton!
@@ -170,7 +173,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         let drop = makeButton("DROP FROM HEIGHT", action: #selector(dropObject))
         let reset = makeButton("RESET SCENE", action: #selector(resetScene))
         let internals = makeButton("TOGGLE DEVICE INTERNALS", action: #selector(toggleDeviceInternals))
-        sidebar.addSubview(hit); sidebar.addSubview(drop); sidebar.addSubview(reset); sidebar.addSubview(internals)
+        let spawn = makeButton("SPAWN CHAOS PROP", action: #selector(spawnChaosProp))
+        sidebar.addSubview(hit); sidebar.addSubview(drop); sidebar.addSubview(reset); sidebar.addSubview(internals); sidebar.addSubview(spawn)
 
         statusLabel = NSTextField(wrappingLabelWithString: "Ready. Choose a device, room and tool.")
         statusLabel.font = .systemFont(ofSize: 11)
@@ -190,7 +194,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         sceneContainer.wantsLayer = true
         sceneContainer.layer?.backgroundColor = NSColor(calibratedRed: 0.055, green: 0.075, blue: 0.11, alpha: 1).cgColor
         root.addSubview(sceneContainer)
-        let hud = NSTextField(labelWithString: "LIVE DEMO  •  GRAVITY 9.81 m/s²")
+        let hud = NSTextField(labelWithString: "SCORE 0000  •  HITS 00")
+        scoreLabel = hud
         hud.font = .systemFont(ofSize: 10, weight: .bold)
         hud.textColor = NSColor(calibratedRed: 0.76, green: 0.91, blue: 0.96, alpha: 1)
         hud.alignment = .center
@@ -240,7 +245,10 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             internals.leadingAnchor.constraint(equalTo: hit.leadingAnchor),
             internals.trailingAnchor.constraint(equalTo: hit.trailingAnchor),
             internals.topAnchor.constraint(equalTo: reset.bottomAnchor, constant: 9),
-            statusLabel.topAnchor.constraint(greaterThanOrEqualTo: internals.bottomAnchor, constant: 10),
+            spawn.leadingAnchor.constraint(equalTo: hit.leadingAnchor),
+            spawn.trailingAnchor.constraint(equalTo: hit.trailingAnchor),
+            spawn.topAnchor.constraint(equalTo: internals.bottomAnchor, constant: 9),
+            statusLabel.topAnchor.constraint(greaterThanOrEqualTo: spawn.bottomAnchor, constant: 10),
             statusLabel.leadingAnchor.constraint(equalTo: heading.leadingAnchor),
             statusLabel.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -18),
             statusLabel.bottomAnchor.constraint(equalTo: sidebar.bottomAnchor, constant: -22)
@@ -421,6 +429,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
         roomBreakables.removeAll()
         roomPropDamage.removeAll()
+        physicsBlockDamage.removeAll()
         waterEffects.forEach { $0.removeFromParentNode() }
         waterEffects.removeAll()
         activeFireEffects.forEach { $0.removeFromParentNode() }
@@ -765,14 +774,14 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             scene.rootNode.addChildNode(knob)
         }
         for level in 0..<2 {
-            addStaticBox(name: "Wall storage shelf", size: SCNVector3(0.62, 0.12, 4.25),
-                         position: SCNVector3(-9.48, 3.15 + CGFloat(level) * 1.05, -1.65), surface: cabinet)
+            let shelf = addStaticBox(name: "Breakable wall storage shelf", size: SCNVector3(0.62, 0.12, 4.25),
+                                     position: SCNVector3(-9.48, 3.15 + CGFloat(level) * 1.05, -1.65), surface: cabinet)
+            roomBreakables.append(shelf)
             for item in 0..<4 {
-                let bin = SCNNode(geometry: SCNBox(width: 0.34, height: 0.26, length: 0.42, chamferRadius: 0.025))
-                bin.name = "Storage bin"
-                bin.geometry?.firstMaterial = storageBinMaterial(item)
-                bin.position = SCNVector3(-9.42, 3.34 + CGFloat(level) * 1.05, -3.15 + CGFloat(item) * 0.98)
-                scene.rootNode.addChildNode(bin)
+                let bin = addStaticBox(name: "Breakable storage bin", size: SCNVector3(0.34, 0.26, 0.42),
+                                       position: SCNVector3(-9.42, 3.34 + CGFloat(level) * 1.05, -3.15 + CGFloat(item) * 0.98),
+                                       surface: storageBinMaterial(item))
+                roomBreakables.append(bin)
             }
         }
         let pegboard = addStaticBox(name: "Breakable workshop pegboard", size: SCNVector3(0.08, 2.65, 4.15),
@@ -1506,6 +1515,11 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             case "TV": profile = (7.2, 0.80, 0.04, 0.64)
             case "MacBook": profile = (3.4, 0.82, 0.045, 0.62)
             case "iPad": profile = (1.1, 0.76, 0.055, 0.58)
+            case "Digital Camera": profile = (1.25, 0.74, 0.045, 0.52)
+            case "Game Console": profile = (2.8, 0.82, 0.035, 0.66)
+            case "Bluetooth Speaker": profile = (1.1, 0.78, 0.05, 0.48)
+            case "Smartwatch": profile = (0.28, 0.68, 0.06, 0.45)
+            case "Earbuds Case": profile = (0.22, 0.62, 0.07, 0.42)
             default: profile = (0.42, 0.72, 0.065, 0.54)
             }
             configureDynamicBody(
@@ -1820,10 +1834,20 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     }
 
     private func emitFire(on target: SCNNode, worldPoint: SCNVector3) {
-        if target.childNodes.contains(where: { $0.name == "Virtual fire effect" }) { return }
+        let fireParent: SCNNode
+        if let deviceRoot, isInside(target, root: deviceRoot) {
+            fireParent = deviceRoot
+        } else if let prop = roomBreakables.first(where: { isInside(target, root: $0) }) {
+            fireParent = prop
+        } else if let panel = deskBreakablePanels.first(where: { isInside(target, root: $0) }) {
+            fireParent = panel
+        } else {
+            fireParent = target
+        }
+        if fireParent.childNodes.contains(where: { $0.name == "Virtual fire effect" }) { return }
         let fire = SCNNode()
         fire.name = "Virtual fire effect"
-        fire.position = target.convertPosition(worldPoint, from: nil)
+        fire.position = fireParent.convertPosition(worldPoint, from: nil)
         let flame = SCNParticleSystem()
         flame.birthRate = 95
         flame.particleLifeSpan = 0.72
@@ -1853,7 +1877,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         smoke.loops = false
         fire.addParticleSystem(flame)
         fire.addParticleSystem(smoke)
-        target.addChildNode(fire)
+        fireParent.addChildNode(fire)
         activeFireEffects.append(fire)
         fire.runAction(.sequence([.wait(duration: 8), .removeFromParentNode()]))
         statusLabel.stringValue = "Virtual fire effect active — switch to Water Blaster to put it out."
@@ -2211,6 +2235,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                 sprayWater(at: hit.worldCoordinates, hitNode: hit.node)
             } else {
                 let impact = CGFloat(damageLevel) * toolPower
+                damageScore += max(1, Int(impact * 10))
+                hitCount += 1
+                scoreLabel?.stringValue = String(format: "SCORE %04d  •  HITS %02d", damageScore, hitCount)
                 let touchesGlass = hasAncestor(named: "Breakable window glass", startingAt: hit.node)
                 let touchesFrame = hit.node.name?.hasPrefix("Window frame") == true
                 if !windowHasBroken && (touchesGlass || touchesFrame) {
@@ -2285,6 +2312,26 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         statusLabel.stringValue = "Block fractured into four loose pieces."
     }
 
+    @objc private func spawnChaosProp() {
+        guard sceneView != nil else { statusLabel.stringValue = "Start the 3D demo first."; return }
+        let colors = [
+            NSColor(calibratedRed: 0.78, green: 0.34, blue: 0.22, alpha: 1),
+            NSColor(calibratedRed: 0.24, green: 0.55, blue: 0.78, alpha: 1),
+            NSColor(calibratedRed: 0.72, green: 0.62, blue: 0.28, alpha: 1)
+        ]
+        let side = CGFloat.random(in: 0.38...0.72)
+        let geometry = SCNBox(width: side, height: side, length: side, chamferRadius: 0.035)
+        geometry.firstMaterial = material(colors.randomElement() ?? .systemOrange, roughness: 0.64)
+        let prop = SCNNode(geometry: geometry)
+        prop.name = "Physics stack block spawned"
+        prop.position = SCNVector3(CGFloat.random(in: -2.4...2.4), 3.8, CGFloat.random(in: -1.8...1.8))
+        let body = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: geometry, options: nil))
+        configureDynamicBody(body, mass: 0.65, friction: 0.70, restitution: 0.10, angularDamping: 0.38)
+        prop.physicsBody = body
+        scene.rootNode.addChildNode(prop)
+        statusLabel.stringValue = "A fresh breakable prop dropped into the room."
+    }
+
     @objc private func strike() {
         guard let sceneView else { statusLabel.stringValue = "Start the 3D demo first."; return }
         swingTool(at: NSPoint(x: sceneView.bounds.midX, y: sceneView.bounds.midY))
@@ -2301,6 +2348,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
     @objc private func resetScene() {
         buildScene()
+        damageScore = 0
+        hitCount = 0
+        scoreLabel?.stringValue = "SCORE 0000  •  HITS 00"
         statusLabel.stringValue = "Scene reset. All simulated damage and props cleared."
     }
 
