@@ -23,60 +23,67 @@ let sizes = [16,32,64,128,256,512,1024]
 for size in sizes {
     let image = NSImage(size: NSSize(width:size,height:size))
     image.lockFocus()
-    let bounds = NSRect(x:0,y:0,width:size,height:size)
-    NSColor(calibratedRed:0.035,green:0.025,blue:0.075,alpha:1).setFill()
-    NSBezierPath(roundedRect:bounds,xRadius:Double(size)*0.22,yRadius:Double(size)*0.22).fill()
-    let inset = Double(size)*0.045
-    let background = NSBezierPath(roundedRect:NSRect(x:inset,y:inset,width:Double(size)-2*inset,height:Double(size)-2*inset),xRadius:Double(size)*0.22,yRadius:Double(size)*0.22)
-    let gradient = NSGradient(colors:[
-        NSColor(calibratedRed:0.13,green:0.07,blue:0.22,alpha:1),
-        NSColor(calibratedRed:0.30,green:0.12,blue:0.34,alpha:1)
+    let s = CGFloat(size)
+    let bounds = NSRect(x:0,y:0,width:s,height:s)
+    NSColor(calibratedRed:0.018,green:0.028,blue:0.055,alpha:1).setFill()
+    NSBezierPath(roundedRect:bounds,xRadius:s*0.22,yRadius:s*0.22).fill()
+    let glow = NSGradient(colors:[
+        NSColor(calibratedRed:0.035,green:0.16,blue:0.25,alpha:1),
+        NSColor(calibratedRed:0.12,green:0.035,blue:0.19,alpha:1)
     ])!
-    gradient.draw(in:background,angle:135)
-    let ring = NSBezierPath(ovalIn:NSRect(x:Double(size)*0.13,y:Double(size)*0.13,width:Double(size)*0.74,height:Double(size)*0.74))
-    NSColor(calibratedRed:0.98,green:0.56,blue:0.20,alpha:0.35).setStroke()
-    ring.lineWidth = max(1,Double(size)*0.018)
-    ring.stroke()
-    let screen = NSBezierPath(roundedRect:NSRect(x:Double(size)*0.20,y:Double(size)*0.20,width:Double(size)*0.60,height:Double(size)*0.48),xRadius:Double(size)*0.055,yRadius:Double(size)*0.055)
-    NSColor(calibratedRed:0.025,green:0.045,blue:0.065,alpha:1).setFill()
-    screen.fill()
-    screen.lineWidth = max(1,Double(size)*0.025)
-    NSColor(calibratedRed:0.96,green:0.74,blue:0.42,alpha:1).setStroke()
-    screen.stroke()
+    glow.draw(in:bounds,angle:42)
+    let phone = NSRect(x:s*0.24,y:s*0.09,width:s*0.52,height:s*0.82)
+    let body = NSBezierPath(roundedRect:phone,xRadius:s*0.085,yRadius:s*0.085)
+    NSColor(calibratedRed:0.58,green:0.68,blue:0.76,alpha:1).setFill()
+    body.fill()
+    let screen = phone.insetBy(dx:s*0.025,dy:s*0.035)
+    let glass = NSBezierPath(roundedRect:screen,xRadius:s*0.065,yRadius:s*0.065)
+    NSColor(calibratedRed:0.008,green:0.014,blue:0.03,alpha:1).setFill()
+    glass.fill()
+    for band in 0..<9 {
+        let y = screen.minY + CGFloat(band) * screen.height / 9
+        let stripe = NSBezierPath()
+        stripe.lineWidth = s * (0.012 + CGFloat(band % 3) * 0.006)
+        stripe.move(to:NSPoint(x:screen.minX+s*0.015,y:y))
+        stripe.line(to:NSPoint(x:screen.maxX-s*0.015,y:y+CGFloat((band%2)*2-1)*s*0.012))
+        let colors = [
+            NSColor(calibratedRed:1,green:0.025,blue:0.18,alpha:0.95),
+            NSColor(calibratedRed:0.02,green:0.78,blue:1,alpha:0.95),
+            NSColor(calibratedRed:0.68,green:0.06,blue:1,alpha:0.95)
+        ]
+        colors[band%3].setStroke()
+        stripe.stroke()
+    }
     let crack = NSBezierPath()
-    crack.move(to:NSPoint(x:Double(size)*0.50,y:Double(size)*0.62))
-    crack.line(to:NSPoint(x:Double(size)*0.43,y:Double(size)*0.49))
-    crack.line(to:NSPoint(x:Double(size)*0.54,y:Double(size)*0.40))
-    crack.line(to:NSPoint(x:Double(size)*0.47,y:Double(size)*0.27))
     crack.lineCapStyle = .round
     crack.lineJoinStyle = .round
-    crack.lineWidth = max(1,Double(size)*0.025)
-    NSColor(calibratedRed:1.0,green:0.64,blue:0.24,alpha:1).setStroke()
+    crack.lineWidth = s*0.018
+    crack.move(to:NSPoint(x:s*0.50,y:s*0.53))
+    crack.line(to:NSPoint(x:s*0.42,y:s*0.62))
+    crack.line(to:NSPoint(x:s*0.56,y:s*0.70))
+    crack.line(to:NSPoint(x:s*0.46,y:s*0.82))
+    crack.move(to:NSPoint(x:s*0.43,y:s*0.62))
+    crack.line(to:NSPoint(x:s*0.31,y:s*0.57))
+    crack.move(to:NSPoint(x:s*0.56,y:s*0.70))
+    crack.line(to:NSPoint(x:s*0.68,y:s*0.65))
+    NSColor.white.setStroke()
     crack.stroke()
-    let stand = NSBezierPath()
-    stand.move(to:NSPoint(x:Double(size)*0.50,y:Double(size)*0.20))
-    stand.line(to:NSPoint(x:Double(size)*0.50,y:Double(size)*0.12))
-    stand.line(to:NSPoint(x:Double(size)*0.37,y:Double(size)*0.12))
-    stand.line(to:NSPoint(x:Double(size)*0.63,y:Double(size)*0.12))
-    stand.lineWidth = max(2,Double(size)*0.045)
-    NSColor(calibratedRed:0.72,green:0.78,blue:0.84,alpha:1).setStroke()
-    stand.stroke()
-    let head = NSBezierPath(roundedRect:NSRect(x:Double(size)*0.23,y:Double(size)*0.59,width:Double(size)*0.48,height:Double(size)*0.19),xRadius:Double(size)*0.055,yRadius:Double(size)*0.055)
-    NSColor(calibratedRed:0.98,green:0.70,blue:0.20,alpha:1).setFill()
-    head.fill()
-    let highlight = NSBezierPath()
-    highlight.move(to:NSPoint(x:Double(size)*0.29,y:Double(size)*0.70))
-    highlight.line(to:NSPoint(x:Double(size)*0.62,y:Double(size)*0.70))
-    highlight.lineWidth = max(1,Double(size)*0.018)
-    NSColor(calibratedWhite:1,alpha:0.72).setStroke()
-    highlight.stroke()
+    for index in 0..<7 {
+        let x = s * (0.18 + CGFloat(index) * 0.105)
+        let shard = NSBezierPath()
+        shard.move(to:NSPoint(x:x,y:s*0.18))
+        shard.line(to:NSPoint(x:x+CGFloat(index%2 == 0 ? 0.035 : -0.025)*s,y:s*0.11))
+        shard.line(to:NSPoint(x:x+CGFloat(index%2 == 0 ? 0.06 : -0.05)*s,y:s*0.20))
+        shard.close()
+        [NSColor.systemCyan,NSColor.systemPink,NSColor.systemPurple][index%3].withAlphaComponent(0.9).setFill()
+        shard.fill()
+    }
     image.unlockFocus()
-    let tiff = image.tiffRepresentation!
-    let rep = NSBitmapImageRep(data:tiff)!
+    let rep = NSBitmapImageRep(data:image.tiffRepresentation!)!
     let png = rep.representation(using:.png,properties:[:])!
     try png.write(to:URL(fileURLWithPath:"dist/Smash.iconset/icon_\(size)x\(size).png"))
 }
-SWIFT
+SWIFTT
 
 swift "dist/make_icon.swift"
 cp "dist/Smash.iconset/icon_16x16.png" "dist/Smash.iconset/icon_16x16@1x.png"
