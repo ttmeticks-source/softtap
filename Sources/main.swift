@@ -1916,7 +1916,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         spray.runAction(.sequence([.wait(duration: 1.4), .removeFromParentNode()]))
         if extinguished {
             statusLabel.stringValue = "Extinguished! The virtual flame is out."
-            playSpatial("glass_tap", at: point, volume: 0.55)
+            playSpatial("steam_hiss", at: point, volume: 0.82)
         } else {
             statusLabel.stringValue = "Water burst — aim at a virtual flame to extinguish it."
         }
@@ -2229,15 +2229,24 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         aimTool(at: point)
         guard !cursorTool.isHidden else { return }
         if let hit = interactiveHit(at: point) {
+            damageScore += max(1, Int(CGFloat(damageLevel) * toolPower * 10))
+            hitCount += 1
+            scoreLabel?.stringValue = String(format: "SCORE %04d  •  HITS %02d", damageScore, hitCount)
             if selectedTool == "Fire Simulator" {
                 emitFire(on: hit.node, worldPoint: hit.worldCoordinates)
+                playSpatial("fire_roar", at: hit.worldCoordinates, volume: 0.72)
             } else if selectedTool == "Water Blaster" {
                 sprayWater(at: hit.worldCoordinates, hitNode: hit.node)
+                playSpatial("water_spray", at: hit.worldCoordinates, volume: 0.82)
             } else {
                 let impact = CGFloat(damageLevel) * toolPower
-                damageScore += max(1, Int(impact * 10))
-                hitCount += 1
-                scoreLabel?.stringValue = String(format: "SCORE %04d  •  HITS %02d", damageScore, hitCount)
+                switch selectedTool {
+                case "Sledgehammer": playSpatial("sledgehammer_impact", at: hit.worldCoordinates, volume: 0.95)
+                case "Crowbar": playSpatial("crowbar_creak", at: hit.worldCoordinates, volume: 0.82)
+                case "Drill": playSpatial("drill_whirr", at: hit.worldCoordinates, volume: 0.72)
+                case "Saw": playSpatial("saw_whine", at: hit.worldCoordinates, volume: 0.78)
+                default: break
+                }
                 let touchesGlass = hasAncestor(named: "Breakable window glass", startingAt: hit.node)
                 let touchesFrame = hit.node.name?.hasPrefix("Window frame") == true
                 if !windowHasBroken && (touchesGlass || touchesFrame) {
@@ -2286,16 +2295,17 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     }
 
     private func breakPhysicsBlock(_ block: SCNNode, at point: SCNVector3, normal: SCNVector3) {
-        guard block.parent != nil, let box = block.geometry as? SCNBox else { return }
+        guard block.parent != nil, let geometry = block.geometry else { return }
         let world = block.presentation.worldPosition
-        let size = SCNVector3(box.width, box.height, box.length)
-        let material = box.firstMaterial ?? material(.gray, roughness: 0.72)
+        let bounds = geometry.boundingBox
+        let size = SCNVector3(bounds.max.x - bounds.min.x, bounds.max.y - bounds.min.y, bounds.max.z - bounds.min.z)
+        let fragmentMaterial = geometry.firstMaterial ?? material(.gray, roughness: 0.72)
         block.removeFromParentNode()
         let fragmentSize = SCNVector3(size.x * 0.48, size.y * 0.48, size.z * 0.48)
         for index in 0..<4 {
             let fragment = SCNNode(geometry: SCNBox(width: fragmentSize.x, height: fragmentSize.y, length: fragmentSize.z, chamferRadius: 0.012))
             fragment.name = "Physics block fragment"
-            fragment.geometry?.firstMaterial = material
+            fragment.geometry?.firstMaterial = fragmentMaterial
             fragment.position = SCNVector3(world.x + CGFloat(index % 2 - 1) * size.x * 0.24,
                                            world.y + (index < 2 ? -1 : 1) * size.y * 0.20,
                                            world.z + CGFloat(index / 2 - 1) * size.z * 0.22)
