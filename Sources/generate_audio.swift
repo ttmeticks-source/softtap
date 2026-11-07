@@ -133,4 +133,45 @@ try pair("debris_scatter", duration: 1.10) { t, i, s in
     return grains + tinkle
 }
 
-print("Generated thirteen layered material effects, with alternate randomized takes.")
+try pair("sledgehammer_impact", duration: 0.82) { t, i, s in
+    let crack = noise(i, s) * 0.42 * exp(-t * 88)
+    let body = sin(2 * .pi * 58 * t) * 0.44 * exp(-t * 6.8)
+        + sin(2 * .pi * 116 * t) * 0.24 * exp(-t * 9.5)
+        + sin(2 * .pi * 244 * t) * 0.08 * exp(-t * 15)
+    return crack + body
+}
+try pair("crowbar_creak", duration: 0.64) { t, i, s in
+    let strain = sin(2 * .pi * (190 + 70 * sin(t * 17)) * t) * 0.15
+    let metalTicks = noise(i, s) * 0.12 * (pulse(t, 0.12, 0.025) + pulse(t, 0.38, 0.04))
+    return (strain + metalTicks) * exp(-t * 1.8)
+}
+try pair("drill_whirr", duration: 0.72) { t, i, s in
+    let spin = sin(2 * .pi * (145 + 28 * sin(t * 22)) * t) * 0.18
+        + sin(2 * .pi * (290 + 54 * sin(t * 22)) * t) * 0.08
+    let motor = noise(i, s) * 0.055
+    return (spin + motor) * min(1, t * 18) * exp(-t * 0.55)
+}
+try pair("saw_whine", duration: 0.76) { t, i, s in
+    let carrier = sin(2 * .pi * (760 + 180 * sin(t * 28)) * t) * 0.15
+    let rasp = (noise(i, s) - noise(i - 26, s)) * 0.10
+    return (carrier + rasp) * min(1, t * 16) * exp(-t * 0.65)
+}
+try pair("fire_roar", duration: 1.15) { t, i, s in
+    let low = sin(2 * .pi * (74 + 16 * sin(t * 5)) * t) * 0.13
+    let turbulent = noise(i, s) * 0.20 * (0.65 + 0.35 * sin(t * 31))
+    let hiss = (noise(i - 33, s) - noise(i - 97, s)) * 0.08
+    return (low + turbulent + hiss) * (0.78 + 0.22 * sin(t * 9))
+}
+try pair("water_spray", duration: 0.68) { t, i, s in
+    let spray = noise(i, s) * 0.19 * exp(-t * 1.5)
+    let droplets = noise(i / 90, s + 4) > 0.15 ? 0.12 : 0.025
+    let hiss = (noise(i - 15, s) - noise(i - 58, s)) * 0.09
+    return (spray * droplets + hiss) * exp(-t * 1.1)
+}
+try pair("steam_hiss", duration: 0.90) { t, i, s in
+    let broadband = (noise(i, s) - noise(i - 64, s)) * 0.18
+    let pressure = sin(2 * .pi * 410 * t) * 0.025
+    return (broadband + pressure) * exp(-t * 2.2) * min(1, t * 30)
+}
+
+print("Generated twenty layered material and tool effects, with alternate randomized takes.")
