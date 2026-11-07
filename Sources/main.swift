@@ -67,6 +67,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private var showingInternals = false
     private var damageLevel: Float = 0.72
     private var waterEffects: [SCNNode] = []
+    private var activeFireEffects: [SCNNode] = []
     private var roomStyle = "Studio"
     private var statusLabel: NSTextField!
     private var devicePopup: NSPopUpButton!
@@ -421,6 +422,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         roomPropDamage.removeAll()
         waterEffects.forEach { $0.removeFromParentNode() }
         waterEffects.removeAll()
+        activeFireEffects.forEach { $0.removeFromParentNode() }
+        activeFireEffects.removeAll()
         makeRoom()
         makeRoomDressing()
         makeDesk()
@@ -1064,6 +1067,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         detachedDeviceParts.forEach { $0.removeFromParentNode() }
         detachedDeviceParts.removeAll()
         devicePartDamage.removeAll()
+        roomPropDamage.removeAll()
         surfaceDamageMarks.forEach { $0.removeFromParentNode() }
         surfaceDamageMarks.removeAll()
         breakableComponents.removeAll()
@@ -1552,8 +1556,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         let center = SCNVector3((bounds.min.x + bounds.max.x) * 0.5, (bounds.min.y + bounds.max.y) * 0.5, (bounds.min.z + bounds.max.z) * 0.5)
         let sx = bounds.max.x - bounds.min.x, sy = bounds.max.y - bounds.min.y, sz = bounds.max.z - bounds.min.z
         let tangent = max(0.10, min(sx, max(sy, sz)))
-        let radius = max(0.075, tangent * 0.30)
-        let depth = min(0.065, max(0.012, min(sx, min(sy, sz)) * 0.34)) * min(1.4, max(0.45, intensity))
+        let radius = max(0.11, tangent * 0.38)
+        let depth = min(0.14, max(0.022, tangent * 0.085)) * min(1.8, max(0.55, intensity))
         var vertices = [SCNVector3]()
         vertices.reserveCapacity(source.vectorCount)
         source.data.withUnsafeBytes { raw in
@@ -1633,12 +1637,16 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private func damageDevicePart(_ part: SCNNode, at point: SCNVector3, normal: SCNVector3, intensity: CGFloat) {
         guard part.geometry != nil, part !== deviceRoot else { return }
         let key = ObjectIdentifier(part)
-        let accumulated = (devicePartDamage[key] ?? 0) + max(0.08, intensity * 0.42)
+        let accumulated = (devicePartDamage[key] ?? 0) + max(0.06, intensity * 0.30)
         devicePartDamage[key] = accumulated
         deformImpactMesh(part, worldPoint: point, worldNormal: normal, intensity: intensity)
-        part.eulerAngles.z += CGFloat.random(in: -0.006...0.006) * intensity
-        addSurfaceDamage(at: point, normal: normal, scratch: accumulated < 0.65, on: part)
-        if accumulated >= 1.65, part.parent === deviceRoot, let geometry = part.geometry {
+        // Permanent progressive flex: the shell visibly kinks and stays bent between hits.
+        let bend = min(0.045, intensity * 0.0045)
+        part.eulerAngles.x += normal.z * bend
+        part.eulerAngles.z += normal.x * bend * CGFloat.random(in: 0.7...1.3)
+        addSurfaceDamage(at: point, normal: normal, scratch: accumulated < 1.2, on: part)
+        // Structural failure is delayed: components deform and loosen over many hits first.
+        if accumulated >= 5.2, part.parent === deviceRoot, let geometry = part.geometry {
             let world = part.presentation.worldPosition
             let rotation = part.presentation.eulerAngles
             part.removeFromParentNode()
@@ -1658,6 +1666,125 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             breakableComponents.removeAll { $0 === part }
             playSpatial("device_rattle", at: world, volume: 0.72)
             statusLabel.stringValue = "A damaged casing component has come loose."
+        }
+    }
+
+    private func damageRoomProp(_ part: SCNNode, at point: SCNVector3, normal: SCNVector3, intensity: CGFloat) {
+        guard part.geometry != nil, part.physicsBody?.type == .static else { return }
+        let key = ObjectIdentifier(part)
+        let accumulated = (roomPropDamage[key] ?? 0) + intensity * 0.34
+        roomPropDamage[key] = accumulated
+        deformImpactMesh(part, worldPoint: point, worldNormal: normal, intensity: intensity * 0.9)
+        let bend = min(0.055, intensity * 0.005)
+        part.eulerAngles.x += normal.z * bend
+        part.eulerAngles.z += normal.x * bend
+        addSurfaceDamage(at: point, normal: normal, scratch: accumulated < 1.1, on: part)
+        guard accumulated >= 4.8, let geometry = part.geometry else { return }
+        let world = part.presentation.worldPosition
+        let rotation = part.presentation.eulerAngles
+        part.removeFromParentNode()
+        scene.rootNode.addChildNode(part)
+        part.position = world
+        part.eulerAngles = rotation
+        let body = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: geometry, options: nil))
+        configureDynamicBody(body, mass: 0.75, friction: 0.72, restitution: 0.045, angularDamping: 0.52)
+        part.physicsBody = body
+        let kick = min(1.1, 0.22 + intensity * 0.12)
+        body.applyForce(SCNVector3(normal.x * kick, max(0.08, normal.y * kick), normal.z * kick), asImpulse: true)
+        roomBreakables.removeAll { $0 === part }
+        statusLabel.stringValue = "Room prop finally gave way after repeated damage."
+        playSpatial("wood_knock", at: world, volume: 0.86)
+    }
+
+    private var toolPower: CGFloat {
+        switch selectedTool {
+        case "Sledgehammer": return 2.25
+        case "Crowbar": return 1.55
+        case "Drill": return 1.25
+        case "Saw": return 1.65
+        case "Impact Driver": return 1.35
+        case "Rubber Mallet": return 0.78
+        case "Plastic Spudger", "Suction Cup", "Flashlight": return 0.35
+        default: return 1.0
+        }
+    }
+
+    private func emitFire(on target: SCNNode, worldPoint: SCNVector3) {
+        if target.childNodes.contains(where: { $0.name == "Virtual fire effect" }) { return }
+        let fire = SCNNode()
+        fire.name = "Virtual fire effect"
+        fire.position = target.convertPosition(worldPoint, from: nil)
+        let flame = SCNParticleSystem()
+        flame.birthRate = 95
+        flame.particleLifeSpan = 0.72
+        flame.particleLifeSpanVariation = 0.22
+        flame.particleSize = 0.12
+        flame.particleSizeVariation = 0.07
+        flame.particleColor = NSColor(calibratedRed: 1.0, green: 0.30, blue: 0.045, alpha: 0.92)
+        flame.particleColorVariation = SCNVector4(0.08, 0.20, 0.02, 0.08)
+        flame.particleVelocity = 0.42
+        flame.particleVelocityVariation = 0.28
+        flame.acceleration = SCNVector3(0, 0.72, 0)
+        flame.spreadingAngle = 28
+        flame.isAffectedByGravity = false
+        flame.emissionDuration = 7
+        flame.loops = false
+        let smoke = SCNParticleSystem()
+        smoke.birthRate = 18
+        smoke.particleLifeSpan = 1.8
+        smoke.particleSize = 0.19
+        smoke.particleSizeVariation = 0.12
+        smoke.particleColor = NSColor(calibratedWhite: 0.20, alpha: 0.30)
+        smoke.particleVelocity = 0.25
+        smoke.acceleration = SCNVector3(0, 0.38, 0)
+        smoke.spreadingAngle = 38
+        smoke.isAffectedByGravity = false
+        smoke.emissionDuration = 6
+        smoke.loops = false
+        fire.addParticleSystem(flame)
+        fire.addParticleSystem(smoke)
+        target.addChildNode(fire)
+        activeFireEffects.append(fire)
+        fire.runAction(.sequence([.wait(duration: 8), .removeFromParentNode()]))
+        statusLabel.stringValue = "Virtual fire effect active — switch to Water Blaster to put it out."
+    }
+
+    private func sprayWater(at point: SCNVector3, hitNode: SCNNode) {
+        var ancestor: SCNNode? = hitNode
+        var extinguished = false
+        while let current = ancestor {
+            for child in current.childNodes where child.name == "Virtual fire effect" {
+                child.removeFromParentNode()
+                activeFireEffects.removeAll { $0 === child }
+                extinguished = true
+            }
+            ancestor = current.parent
+        }
+        let spray = SCNNode()
+        spray.name = "Water spray effect"
+        let droplets = SCNParticleSystem()
+        droplets.birthRate = 260
+        droplets.particleLifeSpan = 0.48
+        droplets.particleSize = 0.035
+        droplets.particleSizeVariation = 0.02
+        droplets.particleColor = NSColor(calibratedRed: 0.35, green: 0.72, blue: 1, alpha: 0.72)
+        droplets.particleVelocity = 2.4
+        droplets.particleVelocityVariation = 0.9
+        droplets.spreadingAngle = 24
+        droplets.acceleration = SCNVector3(0, -3.2, 0)
+        droplets.isAffectedByGravity = true
+        droplets.emissionDuration = 0.18
+        droplets.loops = false
+        spray.addParticleSystem(droplets)
+        spray.position = point
+        scene.rootNode.addChildNode(spray)
+        waterEffects.append(spray)
+        spray.runAction(.sequence([.wait(duration: 1.4), .removeFromParentNode()]))
+        if extinguished {
+            statusLabel.stringValue = "Extinguished! The virtual flame is out."
+            playSpatial("glass_tap", at: point, volume: 0.55)
+        } else {
+            statusLabel.stringValue = "Water burst — aim at a virtual flame to extinguish it."
         }
     }
 
