@@ -328,14 +328,14 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
     @objc private func startDemo() {
         guard sceneView == nil else { return }
-        statusLabel.stringValue = "Starting 3D demo in low-load mode…"
+        statusLabel.stringValue = "Starting enhanced 3D renderer…"
         let view = SmashSceneView()
         view.translatesAutoresizingMaskIntoConstraints = false
         view.backgroundColor = NSColor(calibratedRed: 0.055, green: 0.075, blue: 0.11, alpha: 1)
         view.allowsCameraControl = true
         view.autoenablesDefaultLighting = false
-        view.antialiasingMode = .none
-        view.preferredFramesPerSecond = 30
+        view.antialiasingMode = .multisampling4X
+        view.preferredFramesPerSecond = 60
         view.delegate = self
         view.defaultCameraController.interactionMode = .orbitTurntable
         view.defaultCameraController.automaticTarget = false
@@ -355,7 +355,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         ])
         sceneView = view
         buildScene()
-        statusLabel.stringValue = "3D demo active · balanced 30 FPS mode."
+        statusLabel.stringValue = "3D demo active · enhanced 60 FPS graphics."
     }
 
     private func buildScene() {
@@ -366,13 +366,20 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
         let camera = SCNNode()
         camera.camera = SCNCamera()
-        // Keep post-processing disabled by default: it can overwhelm integrated GPUs.
-        camera.camera?.wantsHDR = false
-        camera.camera?.wantsExposureAdaptation = false
-        camera.camera?.bloomIntensity = 0
-        camera.camera?.vignettingIntensity = 0
-        camera.camera?.screenSpaceAmbientOcclusionIntensity = 0
-        camera.camera?.screenSpaceAmbientOcclusionRadius = 3.0
+        // Higher-fidelity presentation: HDR, contact shading and restrained lens effects.
+        // SceneKit remains a raster renderer; these settings improve lighting/readability
+        // without pretending to provide BeamNG's custom soft-body rendering pipeline.
+        camera.camera?.wantsHDR = true
+        camera.camera?.wantsExposureAdaptation = true
+        camera.camera?.exposureOffset = 0.15
+        camera.camera?.bloomIntensity = 0.22
+        camera.camera?.bloomThreshold = 0.82
+        camera.camera?.bloomBlurRadius = 8.0
+        camera.camera?.vignettingIntensity = 0.22
+        camera.camera?.vignettingPower = 1.15
+        camera.camera?.screenSpaceAmbientOcclusionIntensity = 0.78
+        camera.camera?.screenSpaceAmbientOcclusionRadius = 4.5
+        camera.camera?.wantsDepthOfField = false
         camera.position = SCNVector3(0, 3.8, 7.2)
         camera.look(at: SCNVector3(0, 1.30, 0))
         camera.camera?.zNear = 0.1
@@ -386,21 +393,22 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         scene.fogEndDistance = 30
         scene.fogDensityExponent = 1.25
         scene.lightingEnvironment.contents = NSColor(calibratedRed: 0.22, green: 0.27, blue: 0.31, alpha: 1)
-        scene.lightingEnvironment.intensity = 0.38
+        scene.lightingEnvironment.intensity = 0.62
         let ambient = SCNNode()
         ambient.light = SCNLight()
         ambient.light?.type = .ambient
-        ambient.light?.intensity = 260
+        ambient.light?.intensity = 190
         scene.rootNode.addChildNode(ambient)
         let key = SCNNode()
         key.light = SCNLight()
         key.light?.type = .spot
-        key.light?.intensity = 1550
+        key.light?.intensity = 2200
         key.light?.spotInnerAngle = 48
         key.light?.spotOuterAngle = 78
-        key.light?.castsShadow = false
-        key.light?.shadowRadius = 3
-        key.light?.shadowSampleCount = 1
+        key.light?.castsShadow = true
+        key.light?.shadowRadius = 7
+        key.light?.shadowSampleCount = 16
+        key.light?.shadowMapSize = CGSize(width: 2048, height: 2048)
         key.light?.shadowColor = NSColor(calibratedWhite: 0.04, alpha: 0.55)
         key.position = SCNVector3(-3.2, 6.2, 4.6)
         key.look(at: SCNVector3(0, 1.0, 0))
@@ -408,14 +416,14 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         let fill = SCNNode()
         fill.light = SCNLight()
         fill.light?.type = .omni
-        fill.light?.intensity = 420
+        fill.light?.intensity = 620
         fill.light?.color = NSColor(calibratedRed: 0.45, green: 0.66, blue: 1, alpha: 1)
         fill.position = SCNVector3(4.2, 3.1, -3.8)
         scene.rootNode.addChildNode(fill)
         let rim = SCNNode()
         rim.light = SCNLight()
         rim.light?.type = .spot
-        rim.light?.intensity = 680
+        rim.light?.intensity = 920
         rim.light?.color = NSColor(calibratedRed: 0.35, green: 0.72, blue: 0.88, alpha: 1)
         rim.light?.spotInnerAngle = 38
         rim.light?.spotOuterAngle = 66
@@ -1064,7 +1072,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         m.diffuse.contents = color
         m.lightingModel = .physicallyBased
         m.roughness.contents = roughness
-        m.metalness.contents = roughness < 0.34 ? 0.28 : 0.045
+        m.metalness.contents = roughness < 0.34 ? 0.48 : 0.035
+        m.locksAmbientWithDiffuse = false
+        m.isDoubleSided = false
         return m
     }
 
