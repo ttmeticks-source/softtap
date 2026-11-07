@@ -1272,7 +1272,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             }
         case "iPad":
             root.addChildNode(box(2.25, 0.12, 3.0, metal, SCNVector3(0, 0.22, 0)))
-            root.addChildNode(box(2.08, 0.035, 2.78, glass, SCNVector3(0, 0.30, 0)))
+            let tabletScreen = box(2.08, 0.035, 2.78, glass, SCNVector3(0, 0.30, 0))
+            tabletScreen.name = "Tablet screen glass"
+            root.addChildNode(tabletScreen)
             addShellSphere("Tablet rear camera lens", radius: 0.055, position: SCNVector3(0.82, 0.33, -1.24), surface: dark)
             addShellBox("Tablet charging port", SCNVector3(0.32, 0.045, 0.035), SCNVector3(0, 0.22, 1.50), dark)
             for i in 0..<8 {
@@ -1345,7 +1347,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             }
         default:
             root.addChildNode(box(1.25, 0.16, 2.45, metal, SCNVector3(0, 0.18, 0), 0.14))
-            root.addChildNode(box(1.12, 0.035, 2.28, glass, SCNVector3(0, 0.28, 0), 0.12))
+            let phoneScreen = box(1.12, 0.035, 2.28, glass, SCNVector3(0, 0.28, 0), 0.12)
+            phoneScreen.name = "Phone screen glass"
+            root.addChildNode(phoneScreen)
             let speaker = SCNNode(geometry: SCNCylinder(radius: 0.045, height: 0.012))
             speaker.geometry?.firstMaterial = metal
             speaker.position = SCNVector3(0, 0.305, 1.02)
