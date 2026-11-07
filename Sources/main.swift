@@ -2306,9 +2306,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             let fragment = SCNNode(geometry: SCNBox(width: fragmentSize.x, height: fragmentSize.y, length: fragmentSize.z, chamferRadius: 0.012))
             fragment.name = "Physics block fragment"
             fragment.geometry?.firstMaterial = fragmentMaterial
-            fragment.position = SCNVector3(world.x + CGFloat(index % 2 - 1) * size.x * 0.24,
+            fragment.position = SCNVector3(world.x + (CGFloat(index % 2) - 0.5) * size.x * 0.50,
                                            world.y + (index < 2 ? -1 : 1) * size.y * 0.20,
-                                           world.z + CGFloat(index / 2 - 1) * size.z * 0.22)
+                                           world.z + (CGFloat(index / 2) - 0.5) * size.z * 0.50)
             let body = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: fragment.geometry!, options: nil))
             configureDynamicBody(body, mass: 0.16, friction: 0.68, restitution: 0.08, angularDamping: 0.34)
             fragment.physicsBody = body
