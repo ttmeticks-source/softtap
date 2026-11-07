@@ -169,8 +169,9 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         sceneView.backgroundColor = NSColor(calibratedRed: 0.055, green: 0.075, blue: 0.11, alpha: 1)
         sceneView.allowsCameraControl = true
         sceneView.autoenablesDefaultLighting = false
-        sceneView.antialiasingMode = .multisampling4X
-        sceneView.preferredFramesPerSecond = 60
+        // Conservative defaults for older Intel Macs and integrated GPUs.
+        sceneView.antialiasingMode = .none
+        sceneView.preferredFramesPerSecond = 30
         sceneView.delegate = self
         sceneView.defaultCameraController.interactionMode = .orbitTurntable
         sceneView.defaultCameraController.automaticTarget = false
@@ -315,13 +316,13 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
         let camera = SCNNode()
         camera.camera = SCNCamera()
-        camera.camera?.wantsHDR = true
-        camera.camera?.wantsExposureAdaptation = true
-        camera.camera?.bloomIntensity = 0.10
-        camera.camera?.bloomThreshold = 1.25
-        camera.camera?.vignettingIntensity = 0.22
-        camera.camera?.screenSpaceAmbientOcclusionIntensity = 0.62
-        camera.camera?.screenSpaceAmbientOcclusionRadius = 7.0
+        // Keep post-processing disabled by default: it can overwhelm integrated GPUs.
+        camera.camera?.wantsHDR = false
+        camera.camera?.wantsExposureAdaptation = false
+        camera.camera?.bloomIntensity = 0
+        camera.camera?.vignettingIntensity = 0
+        camera.camera?.screenSpaceAmbientOcclusionIntensity = 0.12
+        camera.camera?.screenSpaceAmbientOcclusionRadius = 3.0
         camera.position = SCNVector3(0, 3.8, 7.2)
         camera.look(at: SCNVector3(0, 1.30, 0))
         camera.camera?.zNear = 0.1
@@ -348,8 +349,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         key.light?.spotInnerAngle = 48
         key.light?.spotOuterAngle = 78
         key.light?.castsShadow = true
-        key.light?.shadowRadius = 7
-        key.light?.shadowSampleCount = 16
+        key.light?.shadowRadius = 3
+        key.light?.shadowSampleCount = 4
         key.light?.shadowColor = NSColor(calibratedWhite: 0.04, alpha: 0.55)
         key.position = SCNVector3(-3.2, 6.2, 4.6)
         key.look(at: SCNVector3(0, 1.0, 0))
@@ -389,7 +390,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         scene.physicsWorld.gravity = SCNVector3(0, -9.81, 0)
         scene.physicsWorld.speed = 1.0
         // A fixed 120 Hz step reduces tunnelling and jitter for the existing SceneKit bodies.
-        scene.physicsWorld.timeStep = 1.0 / 120.0
+        scene.physicsWorld.timeStep = 1.0 / 60.0
         scene.physicsWorld.contactDelegate = self
     }
 
@@ -421,24 +422,29 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     }
 
     func physicsWorld(_ world: SCNPhysicsWorld, didBegin contact: SCNPhysicsContact) {
-        guard statusLabel != nil else { return }
+        // SceneKit may call its contact delegate on the renderer thread. Snapshot
+        // contact data, then perform AppKit/audio/scene mutations on the main queue.
         let impulse = contact.collisionImpulse
         guard impulse > 0.35 else { return }
         let first = contact.nodeA.name ?? "Object"
         let second = contact.nodeB.name ?? "Surface"
-        if impulse > 3.2, let deviceRoot,
-           isInside(contact.nodeA, root: deviceRoot) || isInside(contact.nodeB, root: deviceRoot) {
-            detachNearestDevicePart(at: contact.contactPoint)
-        }
-        statusLabel.stringValue = String(
-            format: "Scene contact: %@ ↔ %@  ·  impulse %.1f",
-            first, second, impulse
-        )
-        playSurfaceImpact(first: first, second: second, impulse: impulse, position: contact.contactPoint)
-        addImpactDecal(at: contact.contactPoint, normal: contact.contactNormal, impulse: impulse, surfaceName: first + " " + second)
+        let point = contact.contactPoint
+        let normal = contact.contactNormal
+        let touchesDevice = impulse > 3.2 && deviceRoot != nil &&
+            (deviceRoot.map { isInside(contact.nodeA, root: $0) || isInside(contact.nodeB, root: $0) } ?? false)
         let touchesWindow = contact.nodeA.name == "Breakable window glass" || contact.nodeB.name == "Breakable window glass"
-        if touchesWindow && impulse >= windowBreakThreshold {
-            breakWindow(at: contact.contactPoint)
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.statusLabel != nil else { return }
+            if touchesDevice { self.detachNearestDevicePart(at: point) }
+            self.statusLabel.stringValue = String(
+                format: "Scene contact: %@ ↔ %@  ·  impulse %.1f",
+                first, second, impulse
+            )
+            self.playSurfaceImpact(first: first, second: second, impulse: impulse, position: point)
+            self.addImpactDecal(at: point, normal: normal, impulse: impulse, surfaceName: first + " " + second)
+            if touchesWindow && impulse >= self.windowBreakThreshold {
+                self.breakWindow(at: point)
+            }
         }
     }
 
