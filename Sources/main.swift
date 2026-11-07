@@ -1035,8 +1035,22 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         cursorToolPivot.addChildNode(head)
         cursorTool.isHidden = true
     }
+    private func interactiveHit(at point: NSPoint) -> SCNHitTestResult? {
+        sceneView.hitTest(point, options: nil).first { hit in
+            var node: SCNNode? = hit.node
+            while let current = node {
+                if current.name == "Selection marker" || current.name == "Impact VFX decal" ||
+                    current.name == "Cursor tool" || current.name == "Swing pivot" {
+                    return false
+                }
+                node = current.parent
+            }
+            return true
+        }
+    }
+
     private func aimTool(at point: NSPoint) {
-        guard let hit = sceneView.hitTest(point, options: nil).first else { cursorTool.isHidden = true; return }
+        guard let hit = interactiveHit(at: point) else { cursorTool.isHidden = true; return }
         cursorTool.isHidden = false
         cursorTool.position = hit.worldCoordinates
         cursorTool.position.y += 0.48
@@ -1045,7 +1059,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private func swingTool(at point: NSPoint) {
         aimTool(at: point)
         guard !cursorTool.isHidden else { return }
-        if let hit = sceneView.hitTest(point, options: nil).first {
+        if let hit = interactiveHit(at: point) {
             if hit.node.name == "Breakable window glass" || hit.node.name == "Window frame 1" ||
                 hit.node.name == "Window frame 2" || hit.node.name == "Window frame 3" || hit.node.name == "Window frame 4" {
                 windowHitCount += 1
