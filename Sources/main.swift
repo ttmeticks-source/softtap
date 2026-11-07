@@ -1390,6 +1390,90 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         part.runAction(flex, forKey: "device-flex")
     }
 
+    private func addSurfaceDamage(at point: SCNVector3, normal: SCNVector3, scratch: Bool) {
+        let prefix = scratch ? "scratch" : "dent"
+        let names = (1...6).map { String(format: "%@_%02d", prefix, $0) }
+        guard let name = names.randomElement(),
+              let url = Bundle.main.url(forResource: name, withExtension: "png"),
+              let image = NSImage(contentsOf: url) else { return }
+        if surfaceDamageMarks.count >= 48 {
+            surfaceDamageMarks.removeFirst().removeFromParentNode()
+        }
+        let size = scratch ? CGFloat.random(in: 0.18...0.38) : CGFloat.random(in: 0.14...0.27)
+        let plane = SCNPlane(width: size, height: size * CGFloat.random(in: 0.55...1.25))
+        let mat = SCNMaterial()
+        mat.diffuse.contents = image
+        mat.transparent.contents = image
+        mat.isDoubleSided = true
+        mat.lightingModel = .constant
+        mat.blendMode = .alpha
+        plane.firstMaterial = mat
+        let mark = SCNNode(geometry: plane)
+        mark.name = "Surface damage mark"
+        mark.position = SCNVector3(point.x + normal.x * 0.008, point.y + normal.y * 0.008, point.z + normal.z * 0.008)
+        mark.look(at: SCNVector3(point.x + normal.x, point.y + normal.y, point.z + normal.z),
+                  up: scene.rootNode.worldUp, localFront: SCNVector3(0, 0, 1))
+        mark.eulerAngles.z += CGFloat.random(in: 0...(2 * .pi))
+        mark.opacity = 0.88
+        scene.rootNode.addChildNode(mark)
+        surfaceDamageMarks.append(mark)
+    }
+
+    private func damageDevicePart(_ part: SCNNode, at point: SCNVector3, normal: SCNVector3, intensity: CGFloat) {
+        guard part.geometry != nil, part !== deviceRoot else { return }
+        let key = ObjectIdentifier(part)
+        let accumulated = (devicePartDamage[key] ?? 0) + max(0.08, intensity * 0.42)
+        devicePartDamage[key] = accumulated
+        let dent = min(0.16, accumulated * 0.035)
+        let base = part.scale
+        part.scale = SCNVector3(max(0.72, base.x * (1 - dent)),
+                                max(0.72, base.y * (1 - dent * 0.55)),
+                                max(0.72, base.z * (1 - dent)))
+        part.eulerAngles.z += CGFloat.random(in: -0.018...0.018) * intensity
+        addSurfaceDamage(at: point, normal: normal, scratch: accumulated < 0.65)
+        if accumulated >= 1.65, part.parent === deviceRoot, let geometry = part.geometry {
+            let world = part.presentation.worldPosition
+            let rotation = part.presentation.eulerAngles
+            part.removeFromParentNode()
+            scene.rootNode.addChildNode(part)
+            part.position = world
+            part.eulerAngles = rotation
+            let bounds = geometry.boundingBox
+            let volume = abs(bounds.max.x - bounds.min.x) * abs(bounds.max.y - bounds.min.y) * abs(bounds.max.z - bounds.min.z)
+            let body = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: geometry, options: nil))
+            configureDynamicBody(body, mass: min(0.55, max(0.08, volume * 1.8)),
+                                 friction: 0.62, restitution: 0.035, angularDamping: 0.68)
+            part.physicsBody = body
+            let kick = CGFloat.random(in: 0.22...0.48)
+            body.applyForce(SCNVector3(normal.x * kick, max(0.08, normal.y * kick), normal.z * kick), asImpulse: true)
+            detachedDeviceParts.append(part)
+            deviceShellParts.removeAll { $0 === part }
+            breakableComponents.removeAll { $0 === part }
+            play(deviceRattleSound)
+            statusLabel.stringValue = "A damaged casing component has come loose."
+        }
+    }
+
+    private func damageDeskPanel(_ panel: SCNNode, at point: SCNVector3, normal: SCNVector3, intensity: CGFloat) {
+        let key = ObjectIdentifier(panel)
+        let accumulated = (deskPanelDamage[key] ?? 0) + intensity * 0.55
+        deskPanelDamage[key] = accumulated
+        addSurfaceDamage(at: point, normal: normal, scratch: accumulated < 1.2)
+        guard accumulated >= 2.8, panel.physicsBody?.type == .static, let geometry = panel.geometry else { return }
+        let world = panel.presentation.worldPosition
+        let rotation = panel.presentation.eulerAngles
+        panel.removeFromParentNode()
+        scene.rootNode.addChildNode(panel)
+        panel.position = world
+        panel.eulerAngles = rotation
+        let body = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: geometry, options: nil))
+        configureDynamicBody(body, mass: 1.8, friction: 0.78, restitution: 0.025, angularDamping: 0.72)
+        panel.physicsBody = body
+        let kick = CGFloat(0.25 + intensity * 0.25)
+        body.applyForce(SCNVector3(-normal.x * kick, -normal.y * kick, -normal.z * kick), asImpulse: true)
+        statusLabel.stringValue = "A workbench panel has broken free."
+    }
+
     @objc private func toggleDeviceInternals() {
         showingInternals.toggle()
         deviceShellParts.forEach { $0.isHidden = showingInternals }
