@@ -254,6 +254,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         makeRoom()
         makeDesk()
         makeDevice()
+        makePhysicsProps()
     }
 
     // Centralized SceneKit world tuning. A smaller fixed simulation step improves
@@ -475,6 +476,61 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         if current.x != clamped.x || current.y != clamped.y || current.z != clamped.z {
             camera.position = clamped
         }
+    }
+
+    // A small rigid-body stack makes resting contacts, friction and bounce
+    // visible without tying the simulation to tool-driven damage.
+    private func makePhysicsProps() {
+        let baseY = deskTopY + 0.11
+        let blockMaterials: [SCNMaterial] = [
+            material(NSColor(calibratedRed: 0.20, green: 0.62, blue: 0.92, alpha: 1), roughness: 0.62),
+            material(NSColor(calibratedRed: 0.28, green: 0.78, blue: 0.58, alpha: 1), roughness: 0.70),
+            material(NSColor(calibratedRed: 0.92, green: 0.62, blue: 0.24, alpha: 1), roughness: 0.55)
+        ]
+
+        for index in 0..<3 {
+            let side: CGFloat = 0.48
+            let geometry = SCNBox(width: side, height: side, length: side, chamferRadius: 0.035)
+            geometry.firstMaterial = blockMaterials[index]
+            let block = SCNNode(geometry: geometry)
+            block.name = "Physics stack block \(index + 1)"
+            block.position = SCNVector3(2.55, baseY + side * (CGFloat(index) + 0.5), -1.05)
+            let shape = SCNPhysicsShape(geometry: geometry, options: nil)
+            block.physicsBody = SCNPhysicsBody(type: .dynamic, shape: shape)
+            if let body = block.physicsBody {
+                let profiles: [(CGFloat, CGFloat, CGFloat, CGFloat)] = [
+                    (0.72, 0.88, 0.025, 0.82),
+                    (0.86, 0.78, 0.045, 0.76),
+                    (1.05, 0.70, 0.075, 0.70)
+                ]
+                let profile = profiles[index]
+                configureDynamicBody(
+                    body,
+                    mass: profile.0,
+                    friction: profile.1,
+                    restitution: profile.2,
+                    angularDamping: profile.3
+                )
+            }
+            scene.rootNode.addChildNode(block)
+        }
+
+        let sphereGeometry = SCNSphere(radius: 0.20)
+        sphereGeometry.firstMaterial = material(
+            NSColor(calibratedRed: 0.72, green: 0.38, blue: 0.88, alpha: 1),
+            roughness: 0.32
+        )
+        let sphere = SCNNode(geometry: sphereGeometry)
+        sphere.name = "Physics rolling sphere"
+        sphere.position = SCNVector3(2.55, baseY + 0.24, 0.10)
+        sphere.physicsBody = SCNPhysicsBody(
+            type: .dynamic,
+            shape: SCNPhysicsShape(geometry: sphereGeometry, options: nil)
+        )
+        if let body = sphere.physicsBody {
+            configureDynamicBody(body, mass: 0.34, friction: 0.42, restitution: 0.16, angularDamping: 0.24)
+        }
+        scene.rootNode.addChildNode(sphere)
     }
 
     private func roomColor() -> NSColor {
