@@ -143,7 +143,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         demoBadge.translatesAutoresizingMaskIntoConstraints = false
         sidebar.addSubview(demoBadge)
 
-        devicePopup = popup(["iPhone", "MacBook", "Desktop PC", "iPad", "TV", "Smartwatch", "Digital Camera", "Game Console", "Bluetooth Speaker", "Earbuds Case"], selected: selectedDevice)
+        devicePopup = popup(["iPhone", "MacBook", "Desktop PC", "PC Tower", "Engine", "iPad", "TV", "Smartwatch", "Digital Camera", "Game Console", "Bluetooth Speaker", "Earbuds Case"], selected: selectedDevice)
         toolPopup = popup(["Hammer", "Sledgehammer", "Rubber Mallet", "Crowbar", "Wrench", "Screwdriver", "Drill", "Saw", "Impact Driver", "Plastic Spudger", "Suction Cup", "Fire Simulator", "Water Blaster"], selected: selectedTool)
         roomPopup = popup(["Studio", "Garage", "Concrete", "Bedroom", "Neon Lab"], selected: roomStyle)
 
@@ -1154,6 +1154,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             display.eulerAngles.x = -0.10
             root.addChildNode(display)
             let screen = box(2.64, 1.62, 0.025, glass, SCNVector3(0, 1.13, -0.825))
+            screen.name = "MacBook screen glass"
             screen.eulerAngles.x = -0.10
             root.addChildNode(screen)
             for row in 0..<4 { for col in 0..<12 {
@@ -1207,6 +1208,46 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                     addShellBox("Desktop case foot", SCNVector3(0.12, 0.08, 0.12), SCNVector3(x, 0.025, z), dark)
                 }
             }
+        case "PC Tower":
+            addShellBox("PC tower chassis", SCNVector3(1.02, 1.82, 1.02), SCNVector3(0, 0.91, 0), dark, 0.075)
+            addShellBox("PC tower tempered glass side", SCNVector3(0.92, 1.62, 0.025), SCNVector3(0, 0.91, 0.525), glass, 0.035)
+            addShellBox("PC tower top panel", SCNVector3(0.96, 0.045, 0.94), SCNVector3(0, 1.84, 0), metal, 0.025)
+            for y: CGFloat in [0.50, 1.20] {
+                let fan = SCNNode(geometry: SCNTorus(ringRadius: 0.19, pipeRadius: 0.022))
+                fan.name = "PC tower cooling fan ring"
+                fan.geometry?.firstMaterial = metal
+                fan.position = SCNVector3(0, y, 0.545)
+                addShell(fan)
+                addShellSphere("PC tower fan hub", radius: 0.052, position: SCNVector3(0, y, 0.56), surface: dark)
+            }
+            addShellBox("PC tower front I/O panel", SCNVector3(0.34, 0.16, 0.025), SCNVector3(0, 1.62, 0.525), dark, 0.02)
+            for x: CGFloat in [-0.10, 0.10] {
+                addShellBox("PC tower USB port", SCNVector3(0.055, 0.035, 0.018), SCNVector3(x, 1.62, 0.544), metal, 0.006)
+            }
+            for x: CGFloat in [-0.38, 0.38] {
+                for z: CGFloat in [-0.38, 0.38] {
+                    addShellBox("PC tower foot", SCNVector3(0.16, 0.07, 0.16), SCNVector3(x, 0.035, z), dark, 0.02)
+                }
+            }
+        case "Engine":
+            addShellBox("Engine crankcase", SCNVector3(1.58, 0.78, 1.10), SCNVector3(0, 0.62, 0), metal, 0.10)
+            addShellBox("Engine cylinder head", SCNVector3(1.42, 0.36, 0.92), SCNVector3(0, 1.16, 0), dark, 0.08)
+            addShellBox("Engine valve cover", SCNVector3(1.24, 0.18, 0.76), SCNVector3(0, 1.43, 0), metal, 0.07)
+            addShellBox("Engine oil pan", SCNVector3(1.24, 0.22, 0.84), SCNVector3(0, 0.16, 0), dark, 0.06)
+            addShellBox("Engine intake manifold", SCNVector3(0.92, 0.30, 0.52), SCNVector3(0, 1.48, -0.56), metal, 0.06)
+            addShellBox("Engine exhaust manifold", SCNVector3(1.12, 0.22, 0.36), SCNVector3(0, 0.94, 0.60), dark, 0.04)
+            for x: CGFloat in [-0.48, -0.16, 0.16, 0.48] {
+                addShellCylinder("Engine ignition coil", radius: 0.075, height: 0.24,
+                                 position: SCNVector3(x, 1.57, 0.02), surface: dark)
+            }
+            let pulley = SCNNode(geometry: SCNCylinder(radius: 0.30, height: 0.13))
+            pulley.name = "Engine crank pulley"
+            pulley.geometry?.firstMaterial = metal
+            pulley.position = SCNVector3(0.72, 0.50, 0.58)
+            pulley.eulerAngles.x = .pi / 2
+            addShell(pulley)
+            addShellCylinder("Engine alternator housing", radius: 0.22, height: 0.32,
+                             position: SCNVector3(-0.72, 0.72, 0.50), surface: metal)
         case "TV":
             addShellBox("TV rear housing", SCNVector3(3.82, 2.38, 0.20), SCNVector3(0, 1.20, 0), dark, 0.12)
             addShellBox("TV front bezel", SCNVector3(3.84, 2.40, 0.095), SCNVector3(0, 1.20, 0.105), metal, 0.12)
@@ -1366,6 +1407,31 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             for y: CGFloat in [0.48, 1.10] {
                 addInternalCylinder("Case fan", radius: 0.25, height: 0.06, position: SCNVector3(towerX, y, 0.32), color: graphite)
             }
+        case "PC Tower":
+            addInternalBox("PC tower motherboard", SCNVector3(0.72, 1.34, 0.05), SCNVector3(0, 0.94, 0.18), board)
+            addInternalBox("PC tower graphics card", SCNVector3(0.68, 0.18, 0.72), SCNVector3(0, 0.58, -0.12), graphite)
+            addInternalBox("PC tower power supply", SCNVector3(0.78, 0.28, 0.72), SCNVector3(0, 0.24, -0.08), graphite)
+            addInternalBox("PC tower CPU heatsink", SCNVector3(0.34, 0.18, 0.34), SCNVector3(0.10, 1.20, 0.12), silver)
+            for i in 0..<4 {
+                addInternalBox("PC tower RAM module", SCNVector3(0.075, 0.52, 0.045),
+                               SCNVector3(-0.34 + CGFloat(i) * 0.12, 1.00, 0.22), copper)
+            }
+            addInternalCylinder("PC tower cooling fan", radius: 0.24, height: 0.07,
+                                position: SCNVector3(0, 1.35, 0.36), color: graphite)
+        case "Engine":
+            addInternalBox("Engine block inner casting", SCNVector3(1.30, 0.62, 0.88), SCNVector3(0, 0.65, 0), graphite)
+            addInternalBox("Engine cylinder bank", SCNVector3(1.18, 0.34, 0.74), SCNVector3(0, 1.12, 0), silver)
+            addInternalBox("Engine crankshaft assembly", SCNVector3(1.18, 0.12, 0.16), SCNVector3(0, 0.56, 0.05), copper)
+            addInternalBox("Engine timing assembly", SCNVector3(0.22, 0.62, 0.10), SCNVector3(0.72, 0.70, 0.42), graphite)
+            addInternalBox("Engine oil pump", SCNVector3(0.30, 0.20, 0.24), SCNVector3(-0.48, 0.28, 0.30), silver)
+            addInternalBox("Engine coolant pump", SCNVector3(0.26, 0.22, 0.20), SCNVector3(-0.70, 0.78, 0.48), copper)
+            for x: CGFloat in [-0.48, -0.16, 0.16, 0.48] {
+                addInternalCylinder("Engine piston", radius: 0.105, height: 0.20,
+                                    position: SCNVector3(x, 1.02, 0.02), color: silver)
+                addInternalCylinder("Engine valve spring", radius: 0.035, height: 0.12,
+                                    position: SCNVector3(x, 1.36, 0.10), color: copper)
+            }
+            addInternalBox("Engine accessory drive", SCNVector3(0.16, 0.54, 0.08), SCNVector3(-0.78, 0.80, 0.40), graphite)
         case "TV":
             addInternalBox("TV main logic board", SCNVector3(1.12, 0.055, 0.52), SCNVector3(0.82, 0.72, -0.02), board)
             addInternalBox("TV power supply board", SCNVector3(0.72, 0.045, 0.58), SCNVector3(-0.98, 0.64, -0.02), board)
@@ -1451,6 +1517,26 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                                SCNVector3(towerX - 0.30 + CGFloat(i) * 0.11, 0.62, 0.22), copper, 0.32)
             }
             addInternalBox("Motherboard power connector", SCNVector3(0.10, 0.12, 0.16), SCNVector3(towerX + 0.29, 1.18, 0.12), silver)
+        case "PC Tower":
+            for i in 0..<10 {
+                addInternalCylinder("PC tower motherboard capacitor", radius: 0.035, height: 0.12,
+                                    position: SCNVector3(-0.30 + CGFloat(i % 5) * 0.14, 0.82 + CGFloat(i / 5) * 0.20, 0.22), color: silver)
+            }
+            for i in 0..<8 {
+                addInternalBox("PC tower GPU memory chip", SCNVector3(0.09, 0.045, 0.09),
+                               SCNVector3(-0.30 + CGFloat(i) * 0.085, 0.66, -0.02), copper, 0.30)
+            }
+            addInternalBox("PC tower front panel connector", SCNVector3(0.12, 0.08, 0.12), SCNVector3(0, 1.54, 0.36), silver)
+        case "Engine":
+            for x: CGFloat in [-0.48, -0.16, 0.16, 0.48] {
+                addInternalCylinder("Engine connecting rod", radius: 0.045, height: 0.34,
+                                    position: SCNVector3(x, 0.80, 0.06), color: copper)
+            }
+            for i in 0..<8 {
+                addInternalBox("Engine sensor and wiring connector", SCNVector3(0.07, 0.045, 0.08),
+                               SCNVector3(-0.48 + CGFloat(i) * 0.14, 1.48, -0.24), silver, 0.25)
+            }
+            addInternalBox("Engine oil filter", SCNVector3(0.20, 0.32, 0.20), SCNVector3(0.78, 0.42, 0.42), graphite)
         case "TV":
             for i in 0..<14 {
                 addInternalBox("TV board microcomponent", SCNVector3(0.07, 0.028, 0.075),
@@ -1479,6 +1565,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         switch selectedDevice {
         case "MacBook": collisionSize = SCNVector3(3.0, 1.94, 2.0)
         case "Desktop PC": collisionSize = SCNVector3(5.9, 2.15, 1.0)
+        case "PC Tower": collisionSize = SCNVector3(1.12, 1.95, 1.12)
+        case "Engine": collisionSize = SCNVector3(1.95, 1.72, 1.48)
         case "iPad": collisionSize = SCNVector3(2.3, 0.16, 3.0)
         case "TV": collisionSize = SCNVector3(3.84, 2.40, 0.34)
         case "Smartwatch": collisionSize = SCNVector3(1.15, 0.30, 1.30)
@@ -1492,6 +1580,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         switch selectedDevice {
         case "MacBook": modelCenterY = 1.0825
         case "Desktop PC": modelCenterY = 1.10
+        case "PC Tower": modelCenterY = 0.94
+        case "Engine": modelCenterY = 0.86
         case "iPad": modelCenterY = 0.23
         case "TV": modelCenterY = 1.20
         case "Smartwatch": modelCenterY = 0.32
@@ -1512,6 +1602,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             let profile: (mass: CGFloat, friction: CGFloat, restitution: CGFloat, angular: CGFloat)
             switch selectedDevice {
             case "Desktop PC": profile = (9.0, 0.88, 0.035, 0.68)
+            case "PC Tower": profile = (11.5, 0.88, 0.025, 0.62)
+            case "Engine": profile = (32.0, 0.86, 0.025, 0.72)
             case "TV": profile = (7.2, 0.80, 0.04, 0.64)
             case "MacBook": profile = (3.4, 0.82, 0.045, 0.62)
             case "iPad": profile = (1.1, 0.76, 0.055, 0.58)
@@ -1991,6 +2083,91 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         }
     }
 
+    private func isScreenSurface(_ node: SCNNode) -> Bool {
+        var current: SCNNode? = node
+        while let candidate = current {
+            let name = (candidate.name ?? "").lowercased()
+            if name.contains("screen") || name.contains("display") || name.contains("oled") || name.contains("lcd") {
+                return true
+            }
+            current = candidate.parent
+        }
+        return false
+    }
+
+    private func addScreenCrack(at worldPoint: SCNVector3, normal worldNormal: SCNVector3, on hitNode: SCNNode) {
+        var screen: SCNNode? = hitNode
+        while let candidate = screen {
+            let name = (candidate.name ?? "").lowercased()
+            if name.contains("screen") || name.contains("display") || name.contains("oled") || name.contains("lcd") { break }
+            screen = candidate.parent
+        }
+        guard let surface = screen, let geometry = surface.geometry else { return }
+        let localPoint = surface.convertPosition(worldPoint, from: nil)
+        var normal = surface.convertVector(worldNormal, from: nil)
+        let length = max(0.001, sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z))
+        normal = SCNVector3(normal.x / length, normal.y / length, normal.z / length)
+        let bounds = geometry.boundingBox
+        let width = max(0.30, min(1.65, (bounds.max.x - bounds.min.x) * 0.88))
+        let heightAxis = abs(normal.y) > 0.65 ? (bounds.max.z - bounds.min.z) : (bounds.max.y - bounds.min.y)
+        let height = max(0.30, min(1.55, heightAxis * 0.88))
+        let image = NSImage(size: NSSize(width: 512, height: 512))
+        image.lockFocus()
+        NSColor.clear.setFill()
+        NSRect(x: 0, y: 0, width: 512, height: 512).fill()
+        let center = NSPoint(x: CGFloat.random(in: 180...330), y: CGFloat.random(in: 180...330))
+        for ray in 0..<16 {
+            let angle = CGFloat(ray) * (.pi * 2 / 16) + CGFloat.random(in: -0.12...0.12)
+            let reach = CGFloat.random(in: 125...245)
+            let end = NSPoint(x: center.x + cos(angle) * reach, y: center.y + sin(angle) * reach)
+            let crack = NSBezierPath()
+            crack.lineWidth = CGFloat.random(in: 1.0...2.3)
+            crack.move(to: center)
+            let mid = NSPoint(x: center.x + cos(angle) * reach * 0.55 + CGFloat.random(in: -15...15),
+                              y: center.y + sin(angle) * reach * 0.55 + CGFloat.random(in: -15...15))
+            crack.line(to: mid)
+            crack.line(to: end)
+            NSColor(calibratedWhite: 0.96, alpha: 0.92).setStroke()
+            crack.stroke()
+            if ray % 2 == 0 {
+                let branch = NSBezierPath()
+                branch.lineWidth = 1.0
+                branch.move(to: mid)
+                branch.line(to: NSPoint(x: mid.x + CGFloat.random(in: -48...48), y: mid.y + CGFloat.random(in: -48...48)))
+                branch.stroke()
+            }
+        }
+        // Simulated LCD/OLED damage: narrow colour-separated streaks beneath the cracks.
+        for index in 0..<7 {
+            let x = center.x + CGFloat(index - 3) * CGFloat.random(in: 5...11)
+            let band = NSBezierPath()
+            band.lineWidth = CGFloat.random(in: 2...7)
+            band.move(to: NSPoint(x: x, y: center.y - 150))
+            band.line(to: NSPoint(x: x + CGFloat.random(in: -10...10), y: center.y + 150))
+            let colors: [NSColor] = [.systemRed, .systemGreen, .systemBlue, .systemCyan, .systemMagenta]
+            colors[index % colors.count].withAlphaComponent(0.70).setStroke()
+            band.stroke()
+        }
+        image.unlockFocus()
+        let plane = SCNPlane(width: width, height: height)
+        let decalMaterial = SCNMaterial()
+        decalMaterial.diffuse.contents = image
+        decalMaterial.transparent.contents = image
+        decalMaterial.lightingModel = .constant
+        decalMaterial.blendMode = .alpha
+        decalMaterial.isDoubleSided = true
+        plane.firstMaterial = decalMaterial
+        let decal = SCNNode(geometry: plane)
+        decal.name = "Screen crack overlay"
+        decal.position = SCNVector3(localPoint.x + normal.x * 0.004,
+                                     localPoint.y + normal.y * 0.004,
+                                     localPoint.z + normal.z * 0.004)
+        let up = abs(normal.y) > 0.85 ? SCNVector3(0, 0, 1) : SCNVector3(0, 1, 0)
+        decal.look(at: SCNVector3(localPoint.x + normal.x, localPoint.y + normal.y, localPoint.z + normal.z),
+                   up: up, localFront: SCNVector3(0, 0, 1))
+        surface.addChildNode(decal)
+    }
+
     private func playSurfaceImpact(first: String, second: String, impulse: CGFloat, position: SCNVector3) {
         let contactNames = (first + " " + second).lowercased()
         let touchesDevice = contactNames.contains("device") || contactNames.contains("phone") ||
@@ -2000,25 +2177,33 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         let touchesMetal = contactNames.contains("metal") || contactNames.contains("frame") ||
             contactNames.contains("pull") || contactNames.contains("hinge")
         let touchesFloor = contactNames.contains("floor") || contactNames.contains("carpet")
+        let touchesCeramic = contactNames.contains("ceramic") || contactNames.contains("porcelain") || contactNames.contains("tile")
+        let touchesRubber = contactNames.contains("rubber") || contactNames.contains("tyre") || contactNames.contains("tire")
+        let touchesFabric = contactNames.contains("fabric") || contactNames.contains("cloth") || contactNames.contains("upholstery")
+        let touchesAluminum = contactNames.contains("aluminum") || contactNames.contains("aluminium")
+        let touchesSteel = contactNames.contains("steel") || contactNames.contains("stainless")
+        let touchesPlastic = contactNames.contains("plastic") || contactNames.contains("polymer") || contactNames.contains("acrylic")
 
         if contactNames.contains("glass") || contactNames.contains("window") || contactNames.contains("screen") || contactNames.contains("display") {
             playSpatial("glass_tap", at: position, volume: 0.9)
             if impulse > 1.0 { playSpatial("glass_crackle", at: position, volume: 0.82) }
-            if touchesDevice { playSpatial("device_rattle", at: position, volume: 0.72) }
-        } else if touchesMetal {
-            playSpatial("metal_clang", at: position, volume: 0.9)
-            if touchesDevice { playSpatial("device_rattle", at: position, volume: 0.68) }
+        } else if touchesCeramic {
+            playSpatial("ceramic_clink", at: position, volume: 0.88)
+        } else if touchesSteel {
+            playSpatial("steel_ring", at: position, volume: 0.92)
+        } else if touchesAluminum || touchesMetal {
+            playSpatial("aluminum_ting", at: position, volume: 0.88)
         } else if touchesWood {
             playSpatial("wood_knock", at: position, volume: 0.86)
-            if touchesDevice { playSpatial("device_rattle", at: position, volume: 0.62) }
-        } else if touchesFloor {
-            playSpatial("carpet_thump", at: position, volume: 0.78)
-            if touchesDevice { playSpatial("device_rattle", at: position, volume: 0.62) }
-        } else if touchesDevice {
-            playSpatial(impulse > 4.2 ? "surface_scratch" : "device_thud", at: position, volume: 0.9)
-            if impulse > 1.8 { playSpatial("device_rattle", at: position, volume: 0.68) }
+        } else if touchesRubber {
+            playSpatial("rubber_thud", at: position, volume: 0.82)
+        } else if touchesFabric || touchesFloor {
+            playSpatial("fabric_rustle", at: position, volume: 0.72)
+        } else if touchesPlastic || touchesDevice {
+            playSpatial("plastic_click", at: position, volume: 0.82)
+            if impulse > 1.8 { playSpatial("device_rattle", at: position, volume: 0.62) }
         } else {
-            playSpatial("plastic_click", at: position, volume: 0.7)
+            playSpatial("device_thud", at: position, volume: 0.78)
         }
     }
 
@@ -2196,7 +2381,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         let hits = sceneView.hitTest(point, options: nil).filter { hit in
             var node: SCNNode? = hit.node
             while let current = node {
-                if current.name == "Window crack overlay" || current.name == "Surface damage mark" ||
+                if current.name == "Window crack overlay" || current.name == "Screen crack overlay" || current.name == "Surface damage mark" ||
                     current.name == "Cursor tool" || current.name == "Swing pivot" {
                     return false
                 }
@@ -2261,7 +2446,13 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                         statusLabel.stringValue = "Visible glass crack — another hit will scatter the shards."
                     }
                 } else if let device = deviceRoot, isInside(hit.node, root: device) {
-                    playSpatial(impact > 0.9 ? "surface_scratch" : "device_thud", at: hit.worldCoordinates, volume: 0.92)
+                    if isScreenSurface(hit.node) {
+                        addScreenCrack(at: hit.worldCoordinates, normal: hit.worldNormal, on: hit.node)
+                        playSpatial("glass_tap", at: hit.worldCoordinates, volume: 0.92)
+                        if impact > 0.55 { playSpatial("glass_crackle", at: hit.worldCoordinates, volume: 0.86) }
+                    } else {
+                        playSpatial(impact > 0.9 ? "surface_scratch" : "device_thud", at: hit.worldCoordinates, volume: 0.92)
+                    }
                     damageDevicePart(hit.node, at: hit.worldCoordinates, normal: hit.worldNormal, intensity: impact)
                     if impact > 0.45 { playSpatial("device_rattle", at: hit.worldCoordinates, volume: 0.58) }
                     let normal = hit.worldNormal
