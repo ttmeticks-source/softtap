@@ -6,7 +6,7 @@ final class SmashSceneView: SCNView {
     private var mouseTracking: NSTrackingArea?
     override func updateTrackingAreas() {
         if let mouseTracking { removeTrackingArea(mouseTracking) }
-        let area = NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseDragged, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil)
+        let area = NSTrackingArea(rect: bounds, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil)
         addTrackingArea(area)
         mouseTracking = area
         super.updateTrackingAreas()
