@@ -24,7 +24,8 @@ final class SmashSceneView: SCNView {
 
 final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDelegate, SCNPhysicsContactDelegate {
     private var window: NSWindow!
-    private var sceneView: SmashSceneView!
+    private var sceneView: SmashSceneView?
+    private var sceneContainer: NSView!
     private var scene = SCNScene()
     private var deviceRoot: SCNNode?
     private var selectedTool = "Hammer"
@@ -74,7 +75,6 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         // a blank view during first-frame setup and removes the blocking startup modal.
         NSApp.setActivationPolicy(.regular)
         buildWindow()
-        buildScene()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -133,7 +133,16 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         toolPopup = popup(["Hammer", "Rubber Mallet", "Wrench", "Screwdriver", "Flashlight", "Impact Driver", "Plastic Spudger", "Suction Cup"], selected: selectedTool)
         roomPopup = popup(["Studio", "Garage", "Concrete", "Bedroom", "Neon Lab"], selected: roomStyle)
 
-        addSection("DEVICE", control: devicePopup, to: sidebar, top: subtitle, gap: 28)
+        let startDemoButton = makeButton("START 3D DEMO", action: #selector(startDemo))
+        sidebar.addSubview(startDemoButton)
+        startDemoButton.translatesAutoresizingMaskIntoConstraints = false
+        startDemoButton.layer?.backgroundColor = NSColor(calibratedRed: 0.12, green: 0.38, blue: 0.48, alpha: 1).cgColor
+        startDemoButton.topAnchor.constraint(equalTo: subtitle.bottomAnchor, constant: 14).isActive = true
+        startDemoButton.leadingAnchor.constraint(equalTo: heading.leadingAnchor).isActive = true
+        startDemoButton.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -20).isActive = true
+        startDemoButton.heightAnchor.constraint(equalToConstant: 34).isActive = true
+
+        addSection("DEVICE", control: devicePopup, to: sidebar, top: startDemoButton, gap: 38)
         addSection("TOOL", control: toolPopup, to: sidebar, top: devicePopup, gap: 38)
         addSection("ROOM", control: roomPopup, to: sidebar, top: toolPopup, gap: 38)
 
@@ -163,26 +172,13 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         statusLabel.layer?.borderColor = NSColor(calibratedRed: 0.16, green: 0.25, blue: 0.31, alpha: 1).cgColor
         sidebar.addSubview(statusLabel)
 
-        sceneView = SmashSceneView()
-        sceneView.translatesAutoresizingMaskIntoConstraints = false
-        sceneView.scene = scene
-        sceneView.backgroundColor = NSColor(calibratedRed: 0.055, green: 0.075, blue: 0.11, alpha: 1)
-        sceneView.allowsCameraControl = true
-        sceneView.autoenablesDefaultLighting = false
-        // Conservative defaults for older Intel Macs and integrated GPUs.
-        sceneView.antialiasingMode = .none
-        sceneView.preferredFramesPerSecond = 30
-        sceneView.delegate = self
-        sceneView.defaultCameraController.interactionMode = .orbitTurntable
-        sceneView.defaultCameraController.automaticTarget = false
-        sceneView.defaultCameraController.inertiaEnabled = true
-        sceneView.defaultCameraController.target = SCNVector3(0, 1.30, 0)
-        sceneView.defaultCameraController.minimumVerticalAngle = 8
-        sceneView.defaultCameraController.maximumVerticalAngle = 40
-        sceneView.onInspect = { [weak self] point in self?.inspectObject(at: point) }
-        sceneView.onAim = { [weak self] point in self?.aimTool(at: point) }
-        sceneView.onSwing = { [weak self] point in self?.swingTool(at: point) }
-        root.addSubview(sceneView)
+        // A plain AppKit placeholder is shown at launch. SceneKit (and the GPU
+        // renderer) is not created until the user explicitly starts the 3D demo.
+        sceneContainer = NSView()
+        sceneContainer.translatesAutoresizingMaskIntoConstraints = false
+        sceneContainer.wantsLayer = true
+        sceneContainer.layer?.backgroundColor = NSColor(calibratedRed: 0.055, green: 0.075, blue: 0.11, alpha: 1).cgColor
+        root.addSubview(sceneContainer)
         let hud = NSTextField(labelWithString: "LIVE DEMO  •  GRAVITY 9.81 m/s²")
         hud.font = .systemFont(ofSize: 10, weight: .bold)
         hud.textColor = NSColor(calibratedRed: 0.76, green: 0.91, blue: 0.96, alpha: 1)
@@ -200,10 +196,10 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             sidebar.topAnchor.constraint(equalTo: root.topAnchor),
             sidebar.bottomAnchor.constraint(equalTo: root.bottomAnchor),
             sidebar.widthAnchor.constraint(equalToConstant: 278),
-            sceneView.leadingAnchor.constraint(equalTo: sidebar.trailingAnchor),
-            sceneView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            sceneView.topAnchor.constraint(equalTo: root.topAnchor),
-            sceneView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            sceneContainer.leadingAnchor.constraint(equalTo: sidebar.trailingAnchor),
+            sceneContainer.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            sceneContainer.topAnchor.constraint(equalTo: root.topAnchor),
+            sceneContainer.bottomAnchor.constraint(equalTo: root.bottomAnchor),
             hud.topAnchor.constraint(equalTo: root.topAnchor, constant: 16),
             hud.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -18),
             hud.widthAnchor.constraint(equalToConstant: 220),
@@ -247,6 +243,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
 
 
     private func inspectObject(at point: NSPoint) {
+        guard let sceneView else { statusLabel.stringValue = "Start the 3D demo first."; return }
         let hits = sceneView.hitTest(point, options: nil)
         guard let hit = hits.first else {
             statusLabel.stringValue = "Nothing selected. Click a device or room object to inspect it."
@@ -309,7 +306,40 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         return b
     }
 
+    @objc private func startDemo() {
+        guard sceneView == nil else { return }
+        statusLabel.stringValue = "Starting 3D demo in low-load mode…"
+        let view = SmashSceneView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.backgroundColor = NSColor(calibratedRed: 0.055, green: 0.075, blue: 0.11, alpha: 1)
+        view.allowsCameraControl = true
+        view.autoenablesDefaultLighting = false
+        view.antialiasingMode = .none
+        view.preferredFramesPerSecond = 15
+        view.delegate = self
+        view.defaultCameraController.interactionMode = .orbitTurntable
+        view.defaultCameraController.automaticTarget = false
+        view.defaultCameraController.inertiaEnabled = false
+        view.defaultCameraController.target = SCNVector3(0, 1.30, 0)
+        view.defaultCameraController.minimumVerticalAngle = 8
+        view.defaultCameraController.maximumVerticalAngle = 40
+        view.onInspect = { [weak self] point in self?.inspectObject(at: point) }
+        view.onAim = { [weak self] point in self?.aimTool(at: point) }
+        view.onSwing = { [weak self] point in self?.swingTool(at: point) }
+        sceneContainer.addSubview(view)
+        NSLayoutConstraint.activate([
+            view.leadingAnchor.constraint(equalTo: sceneContainer.leadingAnchor),
+            view.trailingAnchor.constraint(equalTo: sceneContainer.trailingAnchor),
+            view.topAnchor.constraint(equalTo: sceneContainer.topAnchor),
+            view.bottomAnchor.constraint(equalTo: sceneContainer.bottomAnchor)
+        ])
+        sceneView = view
+        buildScene()
+        statusLabel.stringValue = "3D demo active · low-load 15 FPS mode."
+    }
+
     private func buildScene() {
+        guard let sceneView else { return }
         scene = SCNScene()
         configurePhysicsWorld()
         sceneView.scene = scene
@@ -1591,6 +1621,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     }
 
     private func interactiveHit(at point: NSPoint) -> SCNHitTestResult? {
+        guard let sceneView else { return nil }
         let hits = sceneView.hitTest(point, options: nil).filter { hit in
             var node: SCNNode? = hit.node
             while let current = node {
@@ -1666,6 +1697,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         statusLabel.stringValue = "Swing animation: " + selectedTool + " · virtual prop only."
     }
     @objc private func strike() {
+        guard let sceneView else { statusLabel.stringValue = "Start the 3D demo first."; return }
         swingTool(at: NSPoint(x: sceneView.bounds.midX, y: sceneView.bounds.midY))
     }
 
