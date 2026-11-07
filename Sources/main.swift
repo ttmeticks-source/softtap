@@ -274,13 +274,11 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         mass: CGFloat,
         friction: CGFloat,
         restitution: CGFloat,
-        linearDamping: CGFloat,
         angularDamping: CGFloat
     ) {
         body.mass = mass
         body.friction = friction
         body.restitution = min(0.25, max(0.02, restitution))
-        body.linearDamping = linearDamping
         body.angularDamping = angularDamping
         body.allowsResting = true
         body.categoryBitMask = dynamicCategoryMask
@@ -463,11 +461,16 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         guard let camera = renderer.pointOfView else { return }
 
         let current = camera.position
-        let clamped = SCNVector3(
-            min(Float(cameraBounds.x), max(Float(-cameraBounds.x), current.x)),
-            min(Float(cameraBounds.y), max(0.65, current.y)),
-            min(Float(cameraBounds.z), max(Float(-cameraBounds.z), current.z))
-        )
+        let minX = Float(-cameraBounds.x)
+        let maxX = Float(cameraBounds.x)
+        let minY: Float = 0.65
+        let maxY = Float(cameraBounds.y)
+        let minZ = Float(-cameraBounds.z)
+        let maxZ = Float(cameraBounds.z)
+        let x = Swift.min(maxX, Swift.max(minX, current.x))
+        let y = Swift.min(maxY, Swift.max(minY, current.y))
+        let z = Swift.min(maxZ, Swift.max(minZ, current.z))
+        let clamped = SCNVector3(x, y, z)
 
         if current.x != clamped.x || current.y != clamped.y || current.z != clamped.z {
             camera.position = clamped
@@ -558,19 +561,18 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         let collisionGeometry = SCNBox(width: CGFloat(collisionSize.x), height: CGFloat(collisionSize.y), length: CGFloat(collisionSize.z), chamferRadius: 0.05)
         root.physicsBody = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: collisionGeometry, options: nil))
         if let body = root.physicsBody {
-            let profile: (mass: CGFloat, friction: CGFloat, restitution: CGFloat, linear: CGFloat, angular: CGFloat)
+            let profile: (mass: CGFloat, friction: CGFloat, restitution: CGFloat, angular: CGFloat)
             switch selectedDevice {
-            case "Desktop PC": profile = (9.0, 0.88, 0.035, 0.16, 0.68)
-            case "MacBook": profile = (3.4, 0.82, 0.045, 0.14, 0.62)
-            case "iPad": profile = (1.1, 0.76, 0.055, 0.10, 0.58)
-            default: profile = (0.42, 0.72, 0.065, 0.08, 0.54)
+            case "Desktop PC": profile = (9.0, 0.88, 0.035, 0.68)
+            case "MacBook": profile = (3.4, 0.82, 0.045, 0.62)
+            case "iPad": profile = (1.1, 0.76, 0.055, 0.58)
+            default: profile = (0.42, 0.72, 0.065, 0.54)
             }
             configureDynamicBody(
                 body,
                 mass: profile.mass,
                 friction: profile.friction,
                 restitution: profile.restitution,
-                linearDamping: profile.linear,
                 angularDamping: profile.angular
             )
         }
@@ -607,7 +609,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             ball.position = SCNVector3(-2.8, 2.5, 1.4)
             ball.physicsBody = SCNPhysicsBody(type: .dynamic, shape: nil)
             if let ballBody = ball.physicsBody {
-                configureDynamicBody(ballBody, mass: 12, friction: 0.68, restitution: 0.025, linearDamping: 0.08, angularDamping: 0.24)
+                configureDynamicBody(ballBody, mass: 12, friction: 0.68, restitution: 0.025, angularDamping: 0.24)
             }
             scene.rootNode.addChildNode(ball)
             ball.physicsBody?.applyForce(SCNVector3(28, -7, -12), asImpulse: true)
