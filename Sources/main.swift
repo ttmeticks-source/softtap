@@ -585,9 +585,15 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         let wallMaterial = material(wallColor(), roughness: 0.95)
         let wallTexture = Bundle.main.url(forResource: "wall_plaster", withExtension: "png")
         wallMaterial.diffuse.contents = wallTexture.flatMap { NSImage(contentsOf: $0) } ?? wallColor()
+        wallMaterial.multiply.contents = wallColor()
         wallMaterial.diffuse.wrapS = .repeat
         wallMaterial.diffuse.wrapT = .repeat
-        wallMaterial.diffuse.contentsTransform = SCNMatrix4MakeScale(3, 2, 1)
+        wallMaterial.diffuse.contentsTransform = SCNMatrix4MakeScale(4, 3, 1)
+        wallMaterial.roughness.contents = 0.94
+        if let normal = Bundle.main.url(forResource: "wall_plaster_normal", withExtension: "png") {
+            wallMaterial.normal.contents = NSImage(contentsOf: normal)
+            wallMaterial.normal.intensity = 0.42
+        }
 
         // Back wall has a real opening for the window; the grass backdrop sits outside it.
         let boundaries: [(String, SCNVector3, SCNVector3)] = [
@@ -611,8 +617,12 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             carpetMaterial.diffuse.contents = carpetImage
             carpetMaterial.diffuse.wrapS = .repeat
             carpetMaterial.diffuse.wrapT = .repeat
-            carpetMaterial.diffuse.contentsTransform = SCNMatrix4MakeScale(8, 7, 1)
+            carpetMaterial.diffuse.contentsTransform = SCNMatrix4MakeScale(12, 10, 1)
             carpetMaterial.roughness.contents = 0.98
+            if let normal = Bundle.main.url(forResource: "carpet_woven_normal", withExtension: "png") {
+                carpetMaterial.normal.contents = NSImage(contentsOf: normal)
+                carpetMaterial.normal.intensity = 0.58
+            }
             let carpet = SCNNode(geometry: SCNPlane(width: 19.8, height: 17.8))
             carpet.name = "Woven room carpet"
             carpet.geometry?.firstMaterial = carpetMaterial
@@ -639,6 +649,17 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
             NSColor(calibratedRed: 0.30, green: 0.20, blue: 0.13, alpha: 1),
             roughness: 0.84
         )
+        if let texture = Bundle.main.url(forResource: "wood_grain", withExtension: "png"),
+           let image = NSImage(contentsOf: texture) {
+            wood.diffuse.contents = image
+            wood.diffuse.wrapS = .repeat
+            wood.diffuse.wrapT = .repeat
+            wood.diffuse.contentsTransform = SCNMatrix4MakeScale(3, 2, 1)
+        }
+        if let normal = Bundle.main.url(forResource: "wood_grain_normal", withExtension: "png") {
+            wood.normal.contents = NSImage(contentsOf: normal)
+            wood.normal.intensity = 0.32
+        }
         let darkMetal = material(
             NSColor(calibratedRed: 0.12, green: 0.15, blue: 0.18, alpha: 1),
             roughness: 0.46

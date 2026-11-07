@@ -24,9 +24,9 @@ func pseudo(_ seed: Int) -> CGFloat {
 }
 
 try writeTexture("wall_plaster") { rect in
-    NSColor(calibratedRed: 0.57, green: 0.55, blue: 0.51, alpha: 1).setFill()
+    NSColor(calibratedRed: 0.62, green: 0.59, blue: 0.53, alpha: 1).setFill()
     rect.fill()
-    for i in 0..<2600 {
+    for i in 0..<6200 {
         let x = pseudo(i * 7 + 3) * 512
         let y = pseudo(i * 13 + 19) * 512
         let d = 0.5 + pseudo(i * 17 + 41) * 2.2
@@ -46,22 +46,119 @@ try writeTexture("wall_plaster") { rect in
 }
 
 try writeTexture("carpet_woven") { rect in
-    NSColor(calibratedRed: 0.20, green: 0.22, blue: 0.24, alpha: 1).setFill()
+    NSColor(calibratedRed: 0.22, green: 0.17, blue: 0.15, alpha: 1).setFill()
     rect.fill()
-    for y in stride(from: 0, to: 512, by: 4) {
-        for x in stride(from: 0, to: 512, by: 4) {
+    for y in stride(from: 0, to: 512, by: 3) {
+        for x in stride(from: 0, to: 512, by: 3) {
             let v = pseudo(x * 37 + y * 13)
-            NSColor(calibratedRed: 0.16 + v * 0.10, green: 0.17 + v * 0.10, blue: 0.18 + v * 0.11, alpha: 1).setFill()
-            NSBezierPath(rect: NSRect(x: CGFloat(x), y: CGFloat(y), width: 2.4, height: 2.4)).fill()
+            let warm = pseudo(x * 17 + y * 31)
+            NSColor(calibratedRed: 0.19 + v * 0.13,
+                    green: 0.145 + warm * 0.105,
+                    blue: 0.13 + v * 0.085, alpha: 1).setFill()
+            NSBezierPath(rect: NSRect(x: CGFloat(x), y: CGFloat(y), width: 2.2, height: 2.2)).fill()
         }
     }
-    for y in stride(from: 1, to: 512, by: 4) {
+    for y in stride(from: 1, to: 512, by: 3) {
         let thread = NSBezierPath()
         thread.move(to: NSPoint(x: 0, y: y))
         thread.line(to: NSPoint(x: 512, y: y))
-        thread.lineWidth = 0.5
-        NSColor(calibratedWhite: 0.82, alpha: 0.10).setStroke()
+        thread.lineWidth = 0.75
+        NSColor(calibratedRed: 0.72, green: 0.57, blue: 0.43, alpha: 0.16).setStroke()
         thread.stroke()
+    }
+    for x in stride(from: 2, to: 512, by: 6) {
+        let thread = NSBezierPath()
+        thread.move(to: NSPoint(x: x, y: 0))
+        thread.line(to: NSPoint(x: x + 12, y: 512))
+        thread.lineWidth = 0.55
+        NSColor(calibratedWhite: 0.92, alpha: 0.07).setStroke()
+        thread.stroke()
+    }
+}
+
+try writeTexture("wall_plaster_normal") { rect in
+    NSColor(calibratedRed: 0.50, green: 0.50, blue: 0.98, alpha: 1).setFill()
+    rect.fill()
+    for i in 0..<2200 {
+        let x = pseudo(i * 7 + 51) * 512
+        let y = pseudo(i * 13 + 17) * 512
+        let length = 4 + pseudo(i * 19 + 33) * 28
+        let stroke = NSBezierPath()
+        stroke.move(to: NSPoint(x: x, y: y))
+        stroke.line(to: NSPoint(x: x + length, y: y + (pseudo(i * 23 + 5) - 0.5) * 3))
+        stroke.lineWidth = 0.7 + pseudo(i * 29 + 9) * 1.5
+        NSColor(calibratedRed: 0.50 + (pseudo(i * 31 + 3) - 0.5) * 0.10,
+                green: 0.50 + (pseudo(i * 37 + 7) - 0.5) * 0.10,
+                blue: 0.94 + pseudo(i * 41 + 11) * 0.06, alpha: 0.8).setStroke()
+        stroke.stroke()
+    }
+}
+
+try writeTexture("carpet_woven_normal") { rect in
+    NSColor(calibratedRed: 0.50, green: 0.50, blue: 1.0, alpha: 1).setFill()
+    rect.fill()
+    for y in stride(from: 0, to: 512, by: 3) {
+        let thread = NSBezierPath()
+        thread.move(to: NSPoint(x: 0, y: y))
+        thread.line(to: NSPoint(x: 512, y: y))
+        thread.lineWidth = 1.4
+        NSColor(calibratedRed: 0.58, green: 0.48, blue: 0.98, alpha: 1).setStroke()
+        thread.stroke()
+    }
+    for x in stride(from: 0, to: 512, by: 3) {
+        let thread = NSBezierPath()
+        thread.move(to: NSPoint(x: x, y: 0))
+        thread.line(to: NSPoint(x: x, y: 512))
+        thread.lineWidth = 1.1
+        NSColor(calibratedRed: 0.43, green: 0.55, blue: 0.98, alpha: 1).setStroke()
+        thread.stroke()
+    }
+}
+
+try writeTexture("wood_grain") { rect in
+    let gradient = NSGradient(colors: [
+        NSColor(calibratedRed: 0.30, green: 0.18, blue: 0.10, alpha: 1),
+        NSColor(calibratedRed: 0.43, green: 0.27, blue: 0.15, alpha: 1),
+        NSColor(calibratedRed: 0.25, green: 0.14, blue: 0.08, alpha: 1)
+    ])!
+    gradient.draw(in: rect, angle: 0)
+    for i in 0..<95 {
+        let y = pseudo(i * 29 + 5) * 512
+        let path = NSBezierPath()
+        path.move(to: NSPoint(x: 0, y: y))
+        path.curve(to: NSPoint(x: 512, y: y + (pseudo(i * 31 + 9) - 0.5) * 24),
+                   controlPoint1: NSPoint(x: 150, y: y + (pseudo(i * 37 + 2) - 0.5) * 15),
+                   controlPoint2: NSPoint(x: 340, y: y + (pseudo(i * 41 + 7) - 0.5) * 18))
+        path.lineWidth = 0.8 + pseudo(i * 43 + 3) * 2.8
+        NSColor(calibratedRed: 0.12, green: 0.065, blue: 0.035,
+                alpha: 0.12 + pseudo(i * 47 + 1) * 0.22).setStroke()
+        path.stroke()
+    }
+    for i in 0..<8 {
+        let x = 45 + pseudo(i * 13 + 8) * 420
+        let y = 45 + pseudo(i * 17 + 3) * 420
+        let knot = NSBezierPath(ovalIn: NSRect(x: x, y: y, width: 10 + pseudo(i * 19 + 4) * 15, height: 4 + pseudo(i * 23 + 6) * 7))
+        knot.lineWidth = 1.5
+        NSColor(calibratedRed: 0.16, green: 0.085, blue: 0.04, alpha: 0.32).setStroke()
+        knot.stroke()
+    }
+}
+
+try writeTexture("wood_grain_normal") { rect in
+    NSColor(calibratedRed: 0.50, green: 0.50, blue: 0.98, alpha: 1).setFill()
+    rect.fill()
+    for i in 0..<1500 {
+        let y = pseudo(i * 17 + 5) * 512
+        let path = NSBezierPath()
+        path.move(to: NSPoint(x: 0, y: y))
+        path.curve(to: NSPoint(x: 512, y: y + (pseudo(i * 23 + 1) - 0.5) * 9),
+                   controlPoint1: NSPoint(x: 150, y: y + 2),
+                   controlPoint2: NSPoint(x: 350, y: y - 2))
+        path.lineWidth = 0.5 + pseudo(i * 29 + 7) * 1.4
+        NSColor(calibratedRed: 0.50 + (pseudo(i * 31 + 9) - 0.5) * 0.13,
+                green: 0.50 + (pseudo(i * 37 + 3) - 0.5) * 0.07,
+                blue: 0.94 + pseudo(i * 41 + 2) * 0.06, alpha: 0.75).setStroke()
+        path.stroke()
     }
 }
 
