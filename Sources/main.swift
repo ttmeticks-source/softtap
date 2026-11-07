@@ -73,7 +73,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     private var sceneView: SmashSceneView!
     private var scene = SCNScene()
     private var deviceRoot: SCNNode?
-    private var selectedTool = "Hammer"
+    private var selectedTool = "Precision Hammer"
     private var selectedDevice = "iPhone"
     private var damageLevel: Float = 0.72
     private var roomStyle = "Studio"
@@ -712,6 +712,10 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     }
 
     private func buildScene() {
+        debrisCount = 0
+        cameraYaw = 0
+        cameraPitch = 0.27
+        cameraDistance = 9.2
         scene = SCNScene()
         scene.physicsWorld.gravity = SCNVector3(0, -9.8, 0)
         scene.physicsWorld.contactDelegate = self
@@ -925,8 +929,12 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         let glass = material(NSColor(calibratedRed: 0.025, green: 0.045, blue: 0.075, alpha: 1), roughness: 0.08)
 
         func box(_ w: CGFloat, _ h: CGFloat, _ d: CGFloat, _ mat: SCNMaterial, _ pos: SCNVector3, _ chamfer: CGFloat = 0.08) -> SCNNode {
-            let n = SCNNode(geometry: SCNBox(width: w, height: h, length: d, chamferRadius: chamfer))
-            n.geometry?.firstMaterial = mat
+            let geometry = SCNBox(width: w, height: h, length: d, chamferRadius: chamfer)
+            geometry.widthSegmentCount = 8
+            geometry.heightSegmentCount = 8
+            geometry.lengthSegmentCount = 8
+            geometry.firstMaterial = mat
+            let n = SCNNode(geometry: geometry)
             n.position = pos
             return n
         }
@@ -1003,39 +1011,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
     @objc private func damageChanged(_ sender: NSSlider) { damageLevel = Float(sender.floatValue) }
 
     @objc private func strike() {
-        guard let target = deviceRoot, let body = target.physicsBody else { return }
-        let force = CGFloat(18 + 72 * damageLevel)
-        switch selectedTool {
-        case "Wrecking Ball":
-            let ball = SCNNode(geometry: SCNSphere(radius: 0.48))
-            ball.geometry?.firstMaterial = material(NSColor(calibratedWhite: 0.22, alpha: 1), roughness: 0.22)
-            ball.position = SCNVector3(-2.8, 2.5, 1.4)
-            ball.physicsBody = SCNPhysicsBody(type: .dynamic, shape: nil)
-            ball.physicsBody?.mass = 12
-            scene.rootNode.addChildNode(ball)
-            ball.physicsBody?.applyForce(SCNVector3(28, -7, -12), asImpulse: true)
-        case "Drop Test":
-            target.position = SCNVector3(0, 4.5, 0)
-            body.velocity = SCNVector3Zero
-            body.angularVelocity = SCNVector4Zero
-        case "Kick":
-            body.applyForce(SCNVector3(0, 2, -Float(force)), asImpulse: true)
-            body.applyTorque(SCNVector4(7, 2, 1, 5), asImpulse: true)
-        default:
-            body.applyForce(SCNVector3(0, Float(force) * 0.48, -Float(force)), asImpulse: true)
-            body.applyTorque(SCNVector4(2, 1, 0, CGFloat(force) * 0.035), asImpulse: true)
-        }
-        addImpactMark()
-        statusLabel.stringValue = "\(selectedTool) applied — simulated physics and cosmetic impact effects."
-    }
-
-    private func addImpactMark() {
-        guard let target = deviceRoot else { return }
-        let crack = SCNNode(geometry: SCNCylinder(radius: CGFloat(0.025 + damageLevel * 0.055), height: 0.012))
-        crack.geometry?.firstMaterial = material(NSColor(calibratedWhite: 0.78, alpha: 1), roughness: 0.2)
-        crack.position = SCNVector3(Float.random(in: -0.35...0.35), 0.36, 0.12)
-        crack.eulerAngles.x = .pi / 2
-        target.addChildNode(crack)
+        let center = NSPoint(x: sceneView.bounds.midX, y: sceneView.bounds.midY)
+        applySelectedTool(at: center, heldFor: 0.85)
     }
 
     @objc private func dropObject() {
