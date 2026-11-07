@@ -77,6 +77,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         buildWindow()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in self?.startDemo() }
     }
 
     private func buildWindow() {
@@ -321,7 +322,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         ])
         sceneView = view
         buildScene()
-        statusLabel.stringValue = "3D demo active · low-load 15 FPS mode."
+        statusLabel.stringValue = "3D demo active · balanced 30 FPS mode."
     }
 
     private func buildScene() {
@@ -423,6 +424,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         body.friction = friction
         body.restitution = min(0.25, max(0.02, restitution))
         body.angularDamping = angularDamping
+        body.damping = 0.08
         body.allowsResting = true
         body.categoryBitMask = dynamicCategoryMask
         body.collisionBitMask = dynamicCategoryMask | staticCategoryMask
@@ -1626,7 +1628,7 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         target.position = SCNVector3(0, 5.2, 0)
         target.physicsBody?.velocity = SCNVector3Zero
         target.physicsBody?.angularVelocity = SCNVector4Zero
-        target.physicsBody?.applyForce(SCNVector3(Float.random(in: -3...3), 0, Float.random(in: -2...2)), asImpulse: true)
+        // Gravity and the collision surface determine the fall; no random sideways impulse.
         statusLabel.stringValue = "Drop test started. The object will fall onto the room floor."
     }
 
