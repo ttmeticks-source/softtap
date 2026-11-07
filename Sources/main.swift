@@ -1646,8 +1646,8 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
         let hits = sceneView.hitTest(point, options: nil).filter { hit in
             var node: SCNNode? = hit.node
             while let current = node {
-                if current.name == "Window crack overlay" || current.name == "Cursor tool" ||
-                    current.name == "Swing pivot" {
+                if current.name == "Window crack overlay" || current.name == "Surface damage mark" ||
+                    current.name == "Cursor tool" || current.name == "Swing pivot" {
                     return false
                 }
                 node = current.parent
@@ -1696,13 +1696,21 @@ final class SmashSimulator: NSObject, NSApplicationDelegate, SCNSceneRendererDel
                     statusLabel.stringValue = "Visible glass crack — one more hit to scatter the shards."
                 }
             } else if let device = deviceRoot, isInside(hit.node, root: device) {
-                let power = CGFloat(5 + damageLevel * 18)
                 let strikeImpulse = CGFloat(damageLevel) * 5
                 if strikeImpulse > 4.2 { play(scratchSound) } else { play(deviceThudSound) }
                 playSpatial(strikeImpulse > 4.2 ? "surface_scratch" : "device_thud", at: hit.worldCoordinates, volume: 0.92)
-                bendDevicePart(hit.node, intensity: CGFloat(damageLevel))
+                damageDevicePart(hit.node, at: hit.worldCoordinates, normal: hit.worldNormal, intensity: CGFloat(damageLevel))
                 if damageLevel > 0.45 { play(deviceRattleSound) }
-                device.physicsBody?.applyForce(SCNVector3(0, power * 0.07, power), asImpulse: true)
+                let normal = hit.worldNormal
+                let impulse = CGFloat(0.16 + damageLevel * 0.34)
+                device.physicsBody?.applyForce(SCNVector3(-normal.x * impulse, -normal.y * impulse, -normal.z * impulse), asImpulse: true)
+            } else if let panel = deskBreakablePanels.first(where: { isInside(hit.node, root: $0) }) {
+                damageDeskPanel(panel, at: hit.worldCoordinates, normal: hit.worldNormal, intensity: CGFloat(damageLevel))
+            } else if hit.node.name?.hasPrefix("Physics stack block") == true {
+                addSurfaceDamage(at: hit.worldCoordinates, normal: hit.worldNormal, scratch: damageLevel > 0.65)
+                hit.node.scale = SCNVector3(max(0.82, hit.node.scale.x - 0.012 * CGFloat(damageLevel)),
+                                            max(0.82, hit.node.scale.y - 0.012 * CGFloat(damageLevel)),
+                                            max(0.82, hit.node.scale.z - 0.012 * CGFloat(damageLevel)))
             }
         }
         cursorToolPivot.removeAllActions()
